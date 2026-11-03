@@ -3,3 +3,4 @@ out/
 release/
 *.log
 .e2e-data/
+.e2e-discord/

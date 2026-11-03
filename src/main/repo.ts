@@ -319,6 +319,7 @@ export function saveSettings(patch: DeepPartial<Settings>): Settings {
   next.appearance.uiScale = clamp(next.appearance.uiScale, 80, 130)
   next.data.keepBackups = clamp(next.data.keepBackups, 1, 50)
   next.updates.intervalHours = clamp(next.updates.intervalHours, 1, 168)
+  if (next.discord.statusShows !== 'game') next.discord.statusShows = 'launcher'
   if (!['auto', 'quit', 'manual'].includes(next.updates.installMode)) next.updates.installMode = DEFAULT_SETTINGS.updates.installMode
   if (!/^#[0-9a-f]{6}$/i.test(next.appearance.accent)) next.appearance.accent = DEFAULT_SETTINGS.appearance.accent
   run("INSERT OR REPLACE INTO settings (key, value) VALUES ('app', ?)", [JSON.stringify(next)])

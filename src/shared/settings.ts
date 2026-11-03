@@ -28,7 +28,8 @@ export const DEFAULT_SETTINGS: Settings = {
     showPlaytime: true,
     showStore: true,
     showButton: true,
-    showBrowsing: false
+    showBrowsing: false,
+    statusShows: 'launcher'
   },
   updates: {
     autoCheck: true,

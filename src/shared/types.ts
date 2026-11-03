@@ -243,6 +243,8 @@ export interface Settings {
     showStore: boolean
     showButton: boolean
     showBrowsing: boolean
+    /** What the "Playing …" line shows: Zenith (game name underneath) or the game itself. */
+    statusShows: 'launcher' | 'game'
   }
   updates: {
     autoCheck: boolean

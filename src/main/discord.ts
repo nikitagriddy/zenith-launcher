@@ -224,8 +224,8 @@ class DiscordPresence {
         type: 0,
         details: game.title.slice(0, 128),
         state: (parts.join(' · ') || 'via Zenith').slice(0, 128),
-        // Show the game (not "Zenith") in the member list where Discord supports it.
-        status_display_type: 2,
+        // 0 = "Playing Zenith" (the app name), 2 = "Playing <game>" (the details line).
+        status_display_type: o.statusShows === 'game' ? 2 : 0,
         assets: {
           large_image: art || LOGO_URL,
           large_text: game.title.slice(0, 128),

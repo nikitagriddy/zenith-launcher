@@ -158,7 +158,10 @@ function DiscordCard() {
             : (st.message ?? 'Something went wrong')
   const dot = st?.state === 'playing' || st?.state === 'connected' ? 'bg-emerald-400' : st?.state === 'error' ? 'bg-red-400' : 'bg-line/30'
   return (
-    <Card title="Discord" description="Show what you're playing on your Discord profile while Discord is open on this PC.">
+    <Card
+      title="Discord"
+      description="Show what you're playing on your Discord profile while Discord is open on this PC. Discord can also detect some games by itself (like Fortnite) and show them separately; turn that off in Discord › Settings › Activity Privacy › “Share your detected activities with others”."
+    >
       <SettingRow
         title="Rich presence"
         description={
@@ -169,6 +172,17 @@ function DiscordCard() {
         }
       >
         <Toggle checked={d.enabled} onChange={(v) => set({ enabled: v })} />
+      </SettingRow>
+      <SettingRow title="Status line shows" description={d.statusShows === 'game' ? '“Playing Fortnite” in your status and the member list.' : '“Playing Zenith”, with the game underneath.'}>
+        <Segmented
+          size="sm"
+          value={d.statusShows}
+          onChange={(v) => set({ statusShows: v })}
+          options={[
+            { value: 'launcher', label: 'Zenith' },
+            { value: 'game', label: 'The game' }
+          ]}
+        />
       </SettingRow>
       <SettingRow title="Show time elapsed" description="The “12:34 elapsed” timer under your status.">
         <Toggle checked={d.showElapsed} disabled={!d.enabled} onChange={(v) => set({ showElapsed: v })} />
