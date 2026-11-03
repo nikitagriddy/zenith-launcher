@@ -1,11 +1,13 @@
 {
   "name": "zenith-launcher",
   "productName": "Zenith",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Zenith - a fast, beautiful game launcher for Windows.",
   "main": "out/main/index.js",
   "author": "Zenith",
   "license": "MIT",
+  "repository": "github:nikitagriddy/zenith-launcher",
+  "homepage": "https://github.com/nikitagriddy/zenith-launcher",
   "private": true,
   "scripts": {
     "dev": "node scripts/dev.mjs",

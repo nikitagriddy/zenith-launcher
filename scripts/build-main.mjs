@@ -1,4 +1,4 @@
-﻿// Bundles the Electron main + preload processes with esbuild.
+// Bundles the Electron main + preload processes with esbuild.
 import { build, context } from 'esbuild'
 import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'

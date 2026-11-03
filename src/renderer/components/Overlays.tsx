@@ -1,4 +1,4 @@
-﻿// Global overlays: toasts, confirm dialog and context menu.
+// Global overlays: toasts, confirm dialog and context menu.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, CheckCircle2, Info, X } from 'lucide-react'

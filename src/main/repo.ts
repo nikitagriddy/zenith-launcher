@@ -1,4 +1,4 @@
-﻿import fs from 'node:fs'
+import fs from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import type { SqlValue } from 'sql.js'
 import type {

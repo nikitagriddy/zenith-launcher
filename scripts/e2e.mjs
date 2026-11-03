@@ -1,4 +1,4 @@
-﻿// End-to-end smoke test: boots the built app with an isolated data folder, scans a fake games folder,
+// End-to-end smoke test: boots the built app with an isolated data folder, scans a fake games folder,
 // launches a real executable, and checks playtime tracking, favorites, collections, settings and backups.
 // Usage: npm run build && npm run test:e2e   (screenshots go to .e2e-data/shots)
 import { _electron as electron } from 'playwright-core'

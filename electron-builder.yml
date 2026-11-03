@@ -25,3 +25,9 @@ nsis:
   shortcutName: Zenith
   uninstallDisplayName: Zenith Game Launcher
   deleteAppDataOnUninstall: false
+publish:
+  provider: github
+  owner: nikitagriddy
+  repo: zenith-launcher
+  releaseType: release
+
