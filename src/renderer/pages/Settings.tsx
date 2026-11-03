@@ -13,19 +13,21 @@ import {
   Palette,
   Power,
   Radar,
+  RefreshCw,
   RotateCcw,
   SlidersHorizontal,
   Trash2,
   Upload,
   X
 } from 'lucide-react'
-import type { AppInfo, ArtworkProgress, BackgroundType, BackupEntry, Category, StorageInfo, ThemeName, UpdateStatus } from '@shared/types'
+import type { AppInfo, ArtworkProgress, BackgroundType, BackupEntry, Category, StorageInfo, ThemeName, UpdateInstallMode, UpdateStatus } from '@shared/types'
 import { ACCENT_PRESETS } from '@shared/settings'
 import { api } from '../lib/api'
 import { useStore, type SettingsTab } from '../lib/store'
 import { cx, formatBytes, formatDateTime } from '../lib/format'
 import { Segmented, Select, SettingRow, Slider, Toggle } from '../components/controls'
 import { LogoMark } from '../components/Logo'
+import { useUpdateStatus } from '../lib/hooks'
 
 const TABS: { id: SettingsTab; label: string; icon: typeof Info }[] = [
   { id: 'general', label: 'General', icon: SlidersHorizontal },
@@ -36,6 +38,7 @@ const TABS: { id: SettingsTab; label: string; icon: typeof Info }[] = [
   { id: 'storage', label: 'Storage', icon: HardDrive },
   { id: 'data', label: 'Backup & data', icon: Database },
   { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard },
+  { id: 'updates', label: 'Updates', icon: RefreshCw },
   { id: 'about', label: 'About', icon: Info }
 ]
 
@@ -363,49 +366,143 @@ function ArtworkCard() {
   )
 }
 
-function UpdatesCard() {
-  const autoUpdate = useStore((s) => s.settings.general.autoUpdate)
+const INSTALL_MODES: { value: UpdateInstallMode; title: string; text: string }[] = [
+  { value: 'auto', title: 'Install automatically', text: 'Download in the background and restart into the new version as soon as it’s ready. Waits until your game closes.' },
+  { value: 'quit', title: 'Install when I quit', text: 'Download in the background and install the next time you close Zenith.' },
+  { value: 'manual', title: 'Ask me first', text: 'Tell me when an update is out. I’ll choose when to download and install it.' }
+]
+
+function UpdatesTab() {
+  const u = useStore((s) => s.settings.updates)
   const { updateSettings, attempt } = useStore.getState()
-  const [st, setSt] = useState<UpdateStatus | null>(null)
-  useEffect(() => {
-    void api.update.status().then(setSt)
-    return api.on('update:status', (x: UpdateStatus) => setSt(x))
-  }, [])
-  const label: Record<UpdateStatus['state'], string> = {
+  const st = useUpdateStatus()
+  const set = (patch: Partial<typeof u>) => void updateSettings({ updates: patch })
+  const busy = !st || ['checking', 'downloading', 'installing'].includes(st.state)
+
+  const headline: Record<UpdateStatus['state'], string> = {
     idle: 'Not checked yet',
     checking: 'Checking for updates…',
-    downloading: `Downloading ${st?.version ?? ''} · ${st?.percent ?? 0}%`,
-    downloaded: `Version ${st?.version ?? ''} is ready to install`,
-    none: 'You’re on the latest version',
-    error: `Update check failed: ${st?.message ?? ''}`,
-    unsupported: st?.message ?? 'Updates unavailable'
+    available: `Zenith ${st?.version ?? ''} is available`,
+    downloading: `Downloading Zenith ${st?.version ?? ''}`,
+    downloaded: st?.waitingForGames ? `Zenith ${st?.version ?? ''} installs when your game closes` : `Zenith ${st?.version ?? ''} is ready to install`,
+    installing: `Restarting to install Zenith ${st?.version ?? ''}…`,
+    none: 'You’re up to date',
+    error: 'Update check failed',
+    unsupported: 'Updates unavailable'
   }
+  const sub =
+    st?.state === 'error' || st?.state === 'unsupported'
+      ? st.message
+      : st?.checkedAt
+        ? `Last checked ${formatDateTime(st.checkedAt)}`
+        : undefined
+
   return (
-    <Card title="Updates" description="Zenith updates itself from its GitHub releases.">
-      <SettingRow title={st ? label[st.state] : '…'} description={`Installed version ${st?.currentVersion ?? '…'}`}>
-        {st?.state === 'downloaded' ? (
-          <button className="btn-primary h-9" onClick={() => void attempt(() => api.update.install(), 'Could not install update')}>
-            <RotateCcw className="h-4 w-4" /> Restart & update
-          </button>
-        ) : (
-          <button
-            className="btn-ghost h-9"
-            disabled={!st || st.state === 'unsupported' || st.state === 'checking' || st.state === 'downloading'}
-            onClick={() => void attempt(() => api.update.check().then(setSt), 'Update check failed')}
+    <>
+      <section className="panel relative overflow-hidden p-6 animate-page-in">
+        <div className="flex items-start gap-5">
+          <div
+            className={cx(
+              'flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ring-1',
+              st?.state === 'error' ? 'bg-red-500/10 text-red-400 ring-red-500/30' : 'bg-accent/10 text-accent ring-accent/25'
+            )}
           >
-            <Download className="h-4 w-4" /> Check now
-          </button>
-        )}
-      </SettingRow>
-      {st?.state === 'downloading' && (
-        <div className="mb-2 h-1 overflow-hidden rounded-full bg-line/[0.08]">
-          <div className="h-full bg-accent transition-all" style={{ width: `${st.percent ?? 0}%` }} />
+            <RefreshCw className={cx('h-6 w-6', busy && st?.state !== 'installing' && 'animate-spin')} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="readout">Installed · v{st?.currentVersion ?? '…'}</div>
+            <div className="mt-1 font-display text-lg font-semibold">{st ? headline[st.state] : '…'}</div>
+            {sub && <div className="mt-1 text-xs text-muted">{sub}</div>}
+          </div>
+          <div className="flex shrink-0 gap-2">
+            {st?.state === 'available' && (
+              <button className="btn-primary" onClick={() => void attempt(() => api.update.download(), 'Download failed')}>
+                <Download className="h-4 w-4" /> Download
+              </button>
+            )}
+            {st?.state === 'downloaded' && (
+              <button className="btn-primary" onClick={() => void attempt(() => api.update.install(), 'Could not install update')}>
+                <RotateCcw className="h-4 w-4" /> Restart & install
+              </button>
+            )}
+            {st?.state === 'installing' && (
+              <button className="btn-ghost" onClick={() => void attempt(() => api.update.postpone())}>
+                Later
+              </button>
+            )}
+            {!['available', 'downloaded', 'installing'].includes(st?.state ?? '') && (
+              <button className="btn-ghost" disabled={busy || st?.state === 'unsupported'} onClick={() => void attempt(() => api.update.check(), 'Update check failed')}>
+                <RefreshCw className="h-4 w-4" /> Check now
+              </button>
+            )}
+          </div>
         </div>
-      )}
-      <SettingRow title="Update automatically" description="Checks on startup and every 6 hours, downloads in the background, installs when you quit.">
-        <Toggle checked={autoUpdate} onChange={(v) => void updateSettings({ general: { autoUpdate: v } })} />
-      </SettingRow>
-    </Card>
+        {(st?.state === 'downloading' || st?.state === 'installing') && (
+          <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-line/[0.08]">
+            <div
+              className={cx('h-full bg-accent transition-all duration-500', st.state === 'installing' && 'animate-pulse')}
+              style={{ width: `${st.state === 'installing' ? 100 : (st.percent ?? 0)}%` }}
+            />
+          </div>
+        )}
+        {st?.notes && ['available', 'downloading', 'downloaded', 'installing'].includes(st.state) && (
+          <div className="mt-5 rounded-xl border border-line/[0.08] bg-bg/40 p-4">
+            <div className="readout mb-2">What’s new in {st.version}</div>
+            <p className="max-h-40 overflow-y-auto whitespace-pre-line text-sm leading-relaxed text-fg/80">{st.notes}</p>
+          </div>
+        )}
+      </section>
+
+      <Card title="Automatic updates" description="Zenith updates itself from its GitHub releases. Nothing is sent about you or your library.">
+        <SettingRow title="Check for updates automatically" description="On startup and on a schedule.">
+          <Toggle checked={u.autoCheck} onChange={(v) => set({ autoCheck: v })} />
+        </SettingRow>
+        <SettingRow title="How often">
+          <Select
+            className="h-9 w-44"
+            value={String(u.intervalHours)}
+            onChange={(v) => set({ intervalHours: Number(v) })}
+            options={[
+              { value: '1', label: 'Every hour' },
+              { value: '6', label: 'Every 6 hours' },
+              { value: '24', label: 'Once a day' },
+              { value: '168', label: 'Once a week' }
+            ]}
+          />
+        </SettingRow>
+        <div className="mt-3">
+          <div className="readout mb-2">When an update is found</div>
+          <div className="space-y-2">
+            {INSTALL_MODES.map((m) => (
+              <button
+                key={m.value}
+                onClick={() => set({ installMode: m.value })}
+                className={cx(
+                  'flex w-full items-start gap-3 rounded-xl border p-4 text-left transition-colors',
+                  u.installMode === m.value ? 'border-accent/60 bg-accent/[0.07]' : 'border-line/[0.08] hover:border-line/20'
+                )}
+              >
+                <span
+                  className={cx(
+                    'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2',
+                    u.installMode === m.value ? 'border-accent' : 'border-line/30'
+                  )}
+                >
+                  {u.installMode === m.value && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
+                </span>
+                <span>
+                  <span className="block text-sm font-semibold">
+                    {m.title}
+                    {m.value === 'auto' && <span className="readout ml-2 !text-accent">Recommended</span>}
+                  </span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-muted">{m.text}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </Card>
+    </>
   )
 }
 
@@ -857,7 +954,6 @@ function AboutTab() {
   useEffect(() => void api.app.info().then(setInfo), [])
   return (
     <>
-    <UpdatesCard />
     <section className="panel relative overflow-hidden p-10 animate-page-in">
       <div className="starfield absolute inset-0 opacity-50" />
       <div className="absolute -right-20 -top-28 h-80 w-80 rounded-full border border-accent/20" />
@@ -901,6 +997,7 @@ export function SettingsPage({ tab = 'general' }: { tab?: SettingsTab }) {
     storage: <StorageTab />,
     data: <DataTab />,
     shortcuts: <ShortcutsTab />,
+    updates: <UpdatesTab />,
     about: <AboutTab />
   }
   return (

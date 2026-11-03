@@ -90,13 +90,19 @@ export interface ArtworkProgress {
   current: string
 }
 
+export type UpdateInstallMode = 'auto' | 'quit' | 'manual'
+
 export interface UpdateStatus {
-  state: 'idle' | 'checking' | 'downloading' | 'downloaded' | 'none' | 'error' | 'unsupported'
+  state: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'installing' | 'none' | 'error' | 'unsupported'
   currentVersion: string
   version?: string
   percent?: number
   message?: string
+  notes?: string
+  releaseDate?: string
   checkedAt?: number
+  /** Downloaded and set to auto-install, but waiting for running games to close. */
+  waitingForGames?: boolean
 }
 
 export interface RunningInfo {
@@ -163,7 +169,12 @@ export interface Settings {
     closeToTray: boolean
     globalHotkey: string
     showNotifications: boolean
-    autoUpdate: boolean
+  }
+  updates: {
+    autoCheck: boolean
+    intervalHours: number
+    /** auto: restart & install as soon as it's downloaded (waits for games to close) · quit: install on next exit · manual: ask first */
+    installMode: UpdateInstallMode
   }
   appearance: {
     theme: ThemeName
@@ -296,7 +307,9 @@ export interface ZenithApi {
   update: {
     status(): Promise<UpdateStatus>
     check(): Promise<UpdateStatus>
+    download(): Promise<void>
     install(): Promise<void>
+    postpone(): Promise<void>
   }
   win: {
     minimize(): Promise<void>

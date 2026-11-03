@@ -19,8 +19,12 @@ export const DEFAULT_SETTINGS: Settings = {
     restoreAfterExit: true,
     closeToTray: true,
     globalHotkey: 'Control+Alt+Z',
-    showNotifications: true,
-    autoUpdate: true
+    showNotifications: true
+  },
+  updates: {
+    autoCheck: true,
+    intervalHours: 6,
+    installMode: 'auto'
   },
   appearance: {
     theme: 'dark',

@@ -77,6 +77,8 @@ const api: ZenithApi = {
   update: {
     status: () => invoke('update:status'),
     check: () => invoke('update:check'),
+    download: () => invoke('update:download'),
+    postpone: () => invoke('update:postpone'),
     install: () => invoke('update:install')
   },
   win: {

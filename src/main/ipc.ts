@@ -9,7 +9,7 @@ import { deleteMedia, extractExeIcon, getMediaDir, importMediaFile, listMediaFil
 import { addGameWithDefaults, importCandidates, removeGameAndMedia, runScan } from './library'
 import type { GameLauncher } from './launcher'
 import { fetchAllArtwork, fetchArtwork } from './artwork'
-import { checkForUpdates, getUpdateStatus, installUpdate } from './updater'
+import { checkForUpdates, downloadUpdate, getUpdateStatus, installUpdate, postponeInstall } from './updater'
 import { log } from './log'
 
 export interface IpcContext {
@@ -21,7 +21,6 @@ export interface IpcContext {
   onSettingsChanged: (prev: Settings, next: Settings) => void
   /** Fetch artwork in the background for games that are missing some (respects the auto-artwork setting). */
   queueArtwork: () => void
-  prepareQuit: () => void
 }
 
 type Handler = (...args: any[]) => unknown
@@ -265,7 +264,9 @@ export function registerIpc(ctx: IpcContext): void {
   // ---- updates ----
   handle('update:status', () => getUpdateStatus())
   handle('update:check', () => checkForUpdates())
-  handle('update:install', () => installUpdate(ctx.prepareQuit))
+  handle('update:download', () => downloadUpdate())
+  handle('update:install', () => installUpdate())
+  handle('update:postpone', () => postponeInstall())
 
   // ---- window ----
   handle('win:minimize', () => ctx.window()?.minimize())

@@ -15,7 +15,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { Settings, ToastPayload } from '@shared/types'
-import { closeDatabase, openDatabase } from './db'
+import { closeDatabase, flushNow, openDatabase } from './db'
 import { initLog, log } from './log'
 import { initMedia, mediaPath } from './media'
 import { initBackups, maybeAutoBackup } from './backup'
@@ -24,7 +24,7 @@ import { registerIpc } from './ipc'
 import { getSettings, listGames, markLaunched, recordSession, requireGame } from './repo'
 import { importCandidates, runScan } from './library'
 import { fetchAllArtwork } from './artwork'
-import { initUpdater, setAutoCheck } from './updater'
+import { applyUpdateSettings, initUpdater, notifyBusyChanged } from './updater'
 
 if (process.env.ZENITH_USER_DATA) app.setPath('userData', path.resolve(process.env.ZENITH_USER_DATA))
 
@@ -358,7 +358,7 @@ function onSettingsChanged(prev: Settings, next: Settings): void {
     applyLoginItem(next)
   }
   if (prev.scanning.autoScanIntervalMin !== next.scanning.autoScanIntervalMin) scheduleAutoScan(next)
-  if (prev.general.autoUpdate !== next.general.autoUpdate) setAutoCheck(next.general.autoUpdate)
+  if (JSON.stringify(prev.updates) !== JSON.stringify(next.updates)) applyUpdateSettings(next.updates)
   if (!prev.library.autoArtwork && next.library.autoArtwork) queueArtwork()
   send('settings:changed', next)
 }
@@ -405,11 +405,7 @@ app.whenReady().then(async () => {
     launchGame,
     createShortcut,
     onSettingsChanged,
-    queueArtwork,
-    prepareQuit: () => {
-      quitting = true
-      launcher.finishAll()
-    }
+    queueArtwork
   })
   createWindow()
   createTray()
@@ -421,10 +417,30 @@ app.whenReady().then(async () => {
   handleArgv(process.argv)
   setTimeout(maybeAutoBackup, 15_000)
   setTimeout(queueArtwork, 6000)
-  initUpdater((st) => {
-    send('update:status', st)
-    if (st.state === 'downloaded') toast({ kind: 'success', title: `Zenith ${st.version} is ready`, message: 'Restart from Settings › About, or it installs when you quit.' })
-  }, s.general.autoUpdate)
+  let lastUpdateState = ''
+  initUpdater(
+    {
+      onStatus: (st) => {
+        send('update:status', st)
+        const key = `${st.state}:${st.version}:${st.waitingForGames}`
+        if (key === lastUpdateState) return
+        lastUpdateState = key
+        const mode = getSettings().updates.installMode
+        if (st.state === 'available') toast({ kind: 'info', title: `Zenith ${st.version} is available`, message: 'Open Settings › Updates to download it.' })
+        else if (st.state === 'downloaded' && st.waitingForGames) toast({ kind: 'info', title: `Zenith ${st.version} downloaded`, message: 'It installs automatically once your game closes.' })
+        else if (st.state === 'downloaded' && mode !== 'auto') toast({ kind: 'success', title: `Zenith ${st.version} is ready`, message: mode === 'quit' ? 'It installs the next time you quit Zenith.' : 'Open Settings › Updates to install it.' })
+        else if (st.state === 'installing') toast({ kind: 'info', title: `Updating to Zenith ${st.version}`, message: 'Zenith restarts in a few seconds.' })
+      },
+      isBusy: () => launcher.list().length > 0,
+      beforeInstall: () => {
+        quitting = true
+        launcher.finishAll()
+        flushNow()
+      }
+    },
+    s.updates
+  )
+  launcher.on('changed', notifyBusyChanged)
   if (s.scanning.autoScanOnStartup) setTimeout(() => void autoScan(), 4000)
 })
 

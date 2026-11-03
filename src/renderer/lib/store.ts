@@ -5,7 +5,7 @@ import { DEFAULT_SETTINGS, mergeSettings } from '@shared/settings'
 import { api } from './api'
 import type { LibFilter } from './library'
 
-export type SettingsTab = 'general' | 'appearance' | 'library' | 'scanning' | 'startup' | 'storage' | 'data' | 'shortcuts' | 'about'
+export type SettingsTab = 'general' | 'appearance' | 'library' | 'scanning' | 'startup' | 'storage' | 'data' | 'shortcuts' | 'updates' | 'about'
 
 export type Route =
   | { page: 'home' }

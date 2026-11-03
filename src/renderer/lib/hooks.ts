@@ -1,4 +1,16 @@
 import { useEffect, useState } from 'react'
+import type { UpdateStatus } from '@shared/types'
+import { api } from './api'
+
+/** Live auto-update status from the main process. */
+export function useUpdateStatus(): UpdateStatus | null {
+  const [st, setSt] = useState<UpdateStatus | null>(null)
+  useEffect(() => {
+    void api.update.status().then(setSt, () => undefined)
+    return api.on('update:status', (x: UpdateStatus) => setSt(x))
+  }, [])
+  return st
+}
 
 /** Re-render on an interval; returns the current timestamp. */
 export function useNow(ms = 1000, enabled = true): number {

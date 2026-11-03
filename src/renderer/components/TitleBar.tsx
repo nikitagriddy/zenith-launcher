@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Copy, ImageDown, Minus, Search, Square, X } from 'lucide-react'
+import { ArrowDownToLine, ChevronLeft, ChevronRight, Copy, ImageDown, Minus, Search, Square, X } from 'lucide-react'
 import type { ArtworkProgress } from '@shared/types'
 import { api } from '../lib/api'
 import { useStore } from '../lib/store'
 import { cx, formatClock } from '../lib/format'
-import { useNow } from '../lib/hooks'
+import { useNow, useUpdateStatus } from '../lib/hooks'
 import { Wordmark } from './Logo'
 
 function RunningIndicator() {
@@ -45,6 +45,32 @@ function ArtworkIndicator() {
         {p.done}/{p.total}
       </span>
     </div>
+  )
+}
+
+function UpdatePill() {
+  const st = useUpdateStatus()
+  const navigate = useStore((s) => s.navigate)
+  if (!st || !['available', 'downloading', 'downloaded', 'installing'].includes(st.state)) return null
+  const text =
+    st.state === 'available'
+      ? `Update ${st.version}`
+      : st.state === 'downloading'
+        ? `Updating ${st.percent ?? 0}%`
+        : st.state === 'installing'
+          ? 'Restarting…'
+          : st.waitingForGames
+            ? 'Update after game'
+            : 'Update ready'
+  return (
+    <button
+      onClick={() => navigate({ page: 'settings', tab: 'updates' })}
+      className="no-drag flex h-8 items-center gap-2 rounded-lg border border-accent/40 bg-accent/10 px-3 text-xs font-semibold text-accent transition-colors hover:bg-accent/20"
+      title={`Zenith ${st.version ?? ''}`}
+    >
+      <ArrowDownToLine className={cx('h-3.5 w-3.5', st.state === 'downloading' && 'animate-bounce')} />
+      {text}
+    </button>
   )
 }
 
@@ -106,6 +132,7 @@ export function TitleBar() {
 
       <div className="flex-1" />
       <ArtworkIndicator />
+      <UpdatePill />
       <RunningIndicator />
 
       <div className="no-drag flex h-full items-center">
