@@ -41,6 +41,17 @@ let cache: { at: number; data: RegistryDump } | null = null
 export function readRegistry(maxAgeMs = 60_000): Promise<RegistryDump> {
   if (cache && Date.now() - cache.at < maxAgeMs) return Promise.resolve(cache.data)
   const empty: RegistryDump = { uninstall: [], gog: [], ubisoft: [] }
+  return readOnce().then(async (data) => {
+    // PowerShell occasionally exits cleanly without printing anything; one retry fixes it.
+    const result = data ?? (await readOnce()) ?? empty
+    if (data === null && result !== empty) log.info('Registry read succeeded on retry')
+    // Only cache real answers, so a bad read never hides installed games for the next minute.
+    if (result.uninstall.length) cache = { at: Date.now(), data: result }
+    return result
+  })
+}
+
+function readOnce(): Promise<RegistryDump | null> {
   return new Promise((resolve) => {
     const encoded = Buffer.from(SCRIPT, 'utf16le').toString('base64')
     execFile(
@@ -50,17 +61,19 @@ export function readRegistry(maxAgeMs = 60_000): Promise<RegistryDump> {
       (err, stdout) => {
         if (err) {
           log.warn('Registry read failed', err.message)
-          return resolve(empty)
+          return resolve(null)
+        }
+        if (!stdout.trim()) {
+          log.warn('Registry read returned no output')
+          return resolve(null)
         }
         try {
-          const raw = JSON.parse(stdout.trim() || '{}')
+          const raw = JSON.parse(stdout.trim())
           const arr = <T>(v: T | T[] | undefined): T[] => (Array.isArray(v) ? v : v ? [v] : [])
-          const data: RegistryDump = { uninstall: arr(raw.uninstall), gog: arr(raw.gog), ubisoft: arr(raw.ubisoft) }
-          cache = { at: Date.now(), data }
-          resolve(data)
+          resolve({ uninstall: arr(raw.uninstall), gog: arr(raw.gog), ubisoft: arr(raw.ubisoft) })
         } catch (e) {
           log.warn('Registry output unreadable', (e as Error).message)
-          resolve(empty)
+          resolve(null)
         }
       }
     )

@@ -1,11 +1,12 @@
 import { shell } from 'electron'
-import { spawn, execFile, type ChildProcess } from 'node:child_process'
+import { spawn, execFile, execFileSync, type ChildProcess } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import fs from 'node:fs'
 import path from 'node:path'
-import type { Game, RunningInfo } from '@shared/types'
+import type { Game, LaunchPlan, LaunchProfileId, RunningInfo } from '@shared/types'
 import { SYSTEM_PROCESS_NAMES, isDriveRoot, walkExes } from './exe'
 import { log } from './log'
+import { preferHighPerformanceGpu, raisePriority, useHighPerformancePlan } from './sysboost'
 
 interface RunState {
   gameId: string
@@ -23,6 +24,12 @@ interface RunState {
   exitedAt?: number
   /** Store game or launcher exe: its process may hand off to the real game. */
   stubLike?: boolean
+  profile: LaunchProfileId
+  /** High CPU priority requested by the launch mode. */
+  boostPriority: boolean
+  /** Session tweaks to undo when the game closes (GPU preference, power plan). */
+  undo: (() => void)[]
+  boostTimers: NodeJS.Timeout[]
   finished: boolean
 }
 
@@ -79,6 +86,23 @@ const CLIENT_EXES = new Set(['riotclientservices.exe', 'battle.net.exe'])
 /** Sources whose exe often exits right away and hands off to the real game process. */
 const STUB_SOURCES = new Set(['ea', 'gog', 'battlenet', 'ubisoft', 'riot', 'epic', 'steam'])
 
+let steamExeCache: string | null | undefined
+/** Steam's own executable, for launching Steam games with launch options. */
+function findSteamExe(): string | null {
+  if (steamExeCache !== undefined) return steamExeCache
+  steamExeCache = null
+  try {
+    const out = execFileSync('reg', ['query', 'HKCU\\Software\\Valve\\Steam', '/v', 'SteamExe'], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }).toString()
+    const line = out.split(/\r?\n/).find((l) => l.includes('REG_SZ'))
+    const exe = line ? path.normalize(line.split('REG_SZ')[1]!.trim()) : ''
+    if (exe && fs.existsSync(exe)) steamExeCache = exe
+  } catch {
+    /* fall through to the usual install folders */
+  }
+  if (!steamExeCache) for (const p of ['C:\\Program Files (x86)\\Steam\\steam.exe', 'C:\\Program Files\\Steam\\steam.exe']) if (fs.existsSync(p)) steamExeCache = p
+  return steamExeCache
+}
+
 function psQuote(s: string): string {
   return `'${s.replace(/'/g, "''")}'`
 }
@@ -87,7 +111,7 @@ export class GameLauncher extends EventEmitter<LauncherEvents> {
   private running = new Map<string, RunState>()
 
   list(): RunningInfo[] {
-    return [...this.running.values()].map((s) => ({ gameId: s.gameId, startedAt: s.startedAt, tracking: s.tracking }))
+    return [...this.running.values()].map((s) => ({ gameId: s.gameId, startedAt: s.startedAt, tracking: s.tracking, profile: s.profile }))
   }
 
   isRunning(id: string): boolean {
@@ -108,7 +132,7 @@ export class GameLauncher extends EventEmitter<LauncherEvents> {
     return names
   }
 
-  async launch(game: Game): Promise<void> {
+  async launch(game: Game, plan: LaunchPlan): Promise<void> {
     if (this.running.has(game.id)) throw new Error(`${game.title} is already running.`)
 
     const exeOk = !!game.exePath && fs.existsSync(game.exePath)
@@ -131,37 +155,50 @@ export class GameLauncher extends EventEmitter<LauncherEvents> {
       waitUntil: 0,
       quietWait: false,
       stubLike: STUB_SOURCES.has(game.source) || /launcher/i.test(path.basename(game.exePath)),
+      profile: plan.profile,
+      boostPriority: plan.priority === 'high',
+      undo: [],
+      boostTimers: [],
       finished: false
     }
+    if (plan.engine.realExe) state.exeNames.add(path.basename(plan.engine.realExe).toLowerCase())
     if (viaClient) for (const n of [...state.exeNames]) if (/launcher|crash|report|setup|unins/i.test(n)) state.exeNames.delete(n)
 
-    if (useUri) {
+    // The user's own options are passed exactly as typed; the launch mode's options go after them.
+    const argLine = [game.launchArgs.trim(), ...(viaClient ? [] : plan.tokens)].filter(Boolean).join(' ')
+    this.applyBeforeStart(state, game, plan)
+
+    const steamExe = useUri && game.source === 'steam' && game.sourceId && argLine ? findSteamExe() : null
+    if (steamExe) {
+      // steam://rungameid can't carry launch options; "steam.exe -applaunch <id> <options>" can.
+      await this.spawnDirect(state, steamExe, `-applaunch ${game.sourceId} ${argLine}`, path.dirname(steamExe), false, false)
+      this.beginWaiting(state, 180_000)
+    } else if (useUri) {
       await shell.openExternal(game.launchUri)
       this.beginWaiting(state, 180_000)
     } else {
       const cwd = game.workingDir && fs.existsSync(game.workingDir) ? game.workingDir : path.dirname(game.exePath)
-      const args = parseArgs(game.launchArgs)
       const ext = path.extname(game.exePath).toLowerCase()
       if (game.runAsAdmin) {
-        this.spawnElevated(state, game.exePath, game.launchArgs, cwd)
+        this.spawnElevated(state, game.exePath, argLine, cwd)
       } else if (viaClient) {
-        await this.spawnDirect(state, game.exePath, args, cwd, false, false)
+        await this.spawnDirect(state, game.exePath, argLine, cwd, false, false)
         this.beginWaiting(state, 180_000)
       } else if (ext === '.exe') {
         try {
-          await this.spawnDirect(state, game.exePath, args, cwd)
+          await this.spawnDirect(state, game.exePath, argLine, cwd)
         } catch (err) {
           const code = (err as NodeJS.ErrnoException).code
           // ERROR_ELEVATION_REQUIRED surfaces as EACCES / UNKNOWN: retry through UAC.
           if (code === 'EACCES' || code === 'UNKNOWN' || code === 'EPERM') {
             log.info('Elevation required, retrying as administrator:', game.exePath)
-            this.spawnElevated(state, game.exePath, game.launchArgs, cwd)
+            this.spawnElevated(state, game.exePath, argLine, cwd)
           } else {
             throw new Error(`Could not start ${game.title}: ${(err as Error).message}`)
           }
         }
       } else if (ext === '.bat' || ext === '.cmd') {
-        await this.spawnDirect(state, `"${game.exePath}"`, args.map((a) => (/\s/.test(a) ? `"${a}"` : a)), cwd, true)
+        await this.spawnDirect(state, `"${game.exePath}"`, argLine, cwd, true)
       } else {
         // .lnk, .url and anything else: let Windows decide how to open it.
         const err = await shell.openPath(game.exePath)
@@ -171,13 +208,24 @@ export class GameLauncher extends EventEmitter<LauncherEvents> {
     }
 
     this.running.set(game.id, state)
+    if (state.boostPriority) {
+      // The game (or the real process behind its launcher) may take a moment to appear.
+      for (const ms of [3000, 15000, 45000]) state.boostTimers.push(setTimeout(() => this.applyPriority(state), ms))
+    }
     this.emit('started', { id: game.id, title: game.title })
     this.emit('changed')
   }
 
-  private spawnDirect(state: RunState, file: string, args: string[], cwd: string, useShell = false, track = true): Promise<void> {
+  /**
+   * Start a process with a raw command-line tail. The line is passed verbatim (no re-quoting), so options
+   * like -ExecCmds="a 1,b 2" reach the game exactly as written.
+   */
+  private spawnDirect(state: RunState, file: string, argLine: string, cwd: string, useShell = false, track = true): Promise<void> {
     return new Promise((resolve, reject) => {
-      const child = spawn(file, args, { cwd, detached: true, stdio: 'ignore', windowsHide: false, shell: useShell })
+      const args = argLine ? [argLine] : []
+      const child = useShell
+        ? spawn(file, args, { cwd, detached: true, stdio: 'ignore', windowsHide: false, shell: true })
+        : spawn(file, args, { cwd, detached: true, stdio: 'ignore', windowsHide: false, windowsVerbatimArguments: true, argv0: `"${file}"` })
       let spawned = false
       child.once('spawn', () => {
         spawned = true
@@ -271,6 +319,7 @@ export class GameLauncher extends EventEmitter<LauncherEvents> {
         state.tracking = 'process'
         if (!state.exitedAt) state.startedAt = Date.now()
         state.exitedAt = 0
+        this.applyPriority(state)
         this.emit('changed')
         return this.schedulePoll(state, 5000)
       }
@@ -293,10 +342,35 @@ export class GameLauncher extends EventEmitter<LauncherEvents> {
     this.finish(state, true)
   }
 
+  /** GPU preference and power plan must be in place before the game starts. */
+  private applyBeforeStart(state: RunState, game: Game, plan: LaunchPlan): void {
+    if (plan.gpu) {
+      const exes = [game.exePath, plan.engine.realExe ?? ''].filter((p) => p && /\.exe$/i.test(p) && !CLIENT_EXES.has(path.basename(p).toLowerCase()))
+      if (exes.length) state.undo.push(preferHighPerformanceGpu(exes))
+    }
+    if (plan.powerPlan) {
+      const release = useHighPerformancePlan()
+      if (release) state.undo.push(release)
+    }
+  }
+
+  private applyPriority(state: RunState): void {
+    if (!state.finished && state.boostPriority) raisePriority([...state.exeNames])
+  }
+
   private finish(state: RunState, tracked: boolean, endedAt = Date.now()): void {
     if (state.finished) return
     state.finished = true
     if (state.timer) clearTimeout(state.timer)
+    state.boostTimers.forEach(clearTimeout)
+    for (const undo of state.undo.reverse()) {
+      try {
+        undo()
+      } catch (err) {
+        log.warn('Could not undo launch-mode change', err)
+      }
+    }
+    state.undo = []
     this.running.delete(state.gameId)
     this.emit('ended', {
       gameId: state.gameId,

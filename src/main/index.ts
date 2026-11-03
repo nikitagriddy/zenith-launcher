@@ -14,7 +14,9 @@ import {
 import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { Settings, ToastPayload } from '@shared/types'
+import type { Game, LaunchPlan, LaunchProfileId, Settings, ToastPayload } from '@shared/types'
+import { buildPlan, resolveProfile } from './profiles'
+import { detectEngine } from './engine'
 import { closeDatabase, flushNow, openDatabase } from './db'
 import { initLog, log } from './log'
 import { initMedia, mediaPath } from './media'
@@ -236,9 +238,19 @@ function createTray(): void {
 
 // ---------- launching ----------
 
-async function launchGame(id: string): Promise<void> {
+const PROFILE_NAMES: Record<LaunchProfileId, string> = { default: '', boost: 'Boost', potato: 'Potato mode', custom: 'Custom mode' }
+
+function planFor(game: Game, profile?: LaunchProfileId): LaunchPlan {
+  const s = getSettings()
+  return buildPlan(game, resolveProfile(game, s, profile), s, detectEngine(game))
+}
+
+async function launchGame(id: string, profile?: LaunchProfileId): Promise<void> {
   const game = requireGame(id)
-  await launcher.launch(game)
+  const plan = planFor(game, profile)
+  if (plan.profile !== 'default') log.info(`Launching ${game.title} in ${plan.profile} mode:`, plan.tokens.join(' ') || '(no launch options)')
+  launchModeNote.set(game.id, plan)
+  await launcher.launch(game, plan)
   markLaunched(game.id, Date.now())
   send('library:changed')
   const s = getSettings()
@@ -262,7 +274,17 @@ launcher.on('changed', () => {
   refreshTray()
   updatePresence()
 })
-launcher.on('started', (g) => toast({ kind: 'success', title: `Launching ${g.title}`, message: 'Have fun! Playtime is being tracked.' }))
+const launchModeNote = new Map<string, LaunchPlan>()
+launcher.on('started', (g) => {
+  const plan = launchModeNote.get(g.id)
+  launchModeNote.delete(g.id)
+  const mode = plan ? PROFILE_NAMES[plan.profile] : ''
+  toast({
+    kind: 'success',
+    title: mode ? `Launching ${g.title} · ${mode}` : `Launching ${g.title}`,
+    message: plan && plan.profile !== 'default' ? [...plan.applies, ...plan.limits].join('\n') : 'Have fun! Playtime is being tracked.'
+  })
+})
 launcher.on('error', (e) => toast({ kind: 'error', title: e.title, message: e.message }))
 launcher.on('ended', (e) => {
   const seconds = e.tracked ? recordSession(e.gameId, e.startedAt, e.endedAt) : 0
@@ -423,6 +445,7 @@ app.whenReady().then(async () => {
     launcher,
     send,
     launchGame,
+    planFor: (id: string, profile: LaunchProfileId) => planFor(requireGame(id), profile),
     createShortcut,
     onSettingsChanged,
     queueArtwork

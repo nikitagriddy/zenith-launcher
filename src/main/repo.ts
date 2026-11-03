@@ -38,6 +38,7 @@ interface GameRow {
   last_played: number
   launch_count: number
   added_at: number
+  launch_profile: string
 }
 
 const FIELD_MAP: Record<string, keyof GameRow> = {
@@ -60,7 +61,8 @@ const FIELD_MAP: Record<string, keyof GameRow> = {
   playtimeSec: 'playtime_sec',
   lastPlayed: 'last_played',
   launchCount: 'launch_count',
-  addedAt: 'added_at'
+  addedAt: 'added_at',
+  launchProfile: 'launch_profile'
 }
 
 function exists(p: string): boolean {
@@ -112,6 +114,7 @@ function toGame(r: GameRow, cats: string[]): Game {
     launchCount: r.launch_count,
     addedAt: r.added_at,
     categoryIds: cats,
+    launchProfile: (['default', 'boost', 'potato', 'custom'].includes(r.launch_profile) ? r.launch_profile : '') as Game['launchProfile'],
     installed: false
   }
   g.installed = isInstalled(g)
@@ -320,6 +323,9 @@ export function saveSettings(patch: DeepPartial<Settings>): Settings {
   next.data.keepBackups = clamp(next.data.keepBackups, 1, 50)
   next.updates.intervalHours = clamp(next.updates.intervalHours, 1, 168)
   if (next.discord.statusShows !== 'game') next.discord.statusShows = 'launcher'
+  next.launch.potatoRenderScale = clamp(next.launch.potatoRenderScale, 25, 100)
+  if (!['default', 'boost', 'potato', 'custom'].includes(next.launch.defaultProfile)) next.launch.defaultProfile = 'default'
+  if (!['native', '1600x900', '1280x720', '960x540'].includes(next.launch.potatoResolution)) next.launch.potatoResolution = '1280x720'
   if (!['auto', 'quit', 'manual'].includes(next.updates.installMode)) next.updates.installMode = DEFAULT_SETTINGS.updates.installMode
   if (!/^#[0-9a-f]{6}$/i.test(next.appearance.accent)) next.appearance.accent = DEFAULT_SETTINGS.appearance.accent
   run("INSERT OR REPLACE INTO settings (key, value) VALUES ('app', ?)", [JSON.stringify(next)])

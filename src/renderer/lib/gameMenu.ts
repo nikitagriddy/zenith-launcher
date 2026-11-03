@@ -1,6 +1,8 @@
 import { Eye, EyeOff, FolderOpen, ImageDown, Info, Link, Pencil, Play, Star, Trash2, MonitorSmartphone } from 'lucide-react'
 import type { Game } from '@shared/types'
+import { Zap } from 'lucide-react'
 import { api } from './api'
+import { PotatoIcon } from './modes'
 import { useStore, type MenuItem } from './store'
 
 /** Context-menu actions for a game, shared by cards, rows and the details page. */
@@ -9,6 +11,8 @@ export function gameMenuItems(game: Game): MenuItem[] {
   const running = !!s.running[game.id]
   return [
     { label: running ? 'Running…' : 'Play', icon: Play, disabled: running || !game.installed, onClick: () => void s.launch(game.id) },
+    { label: 'Play in Potato mode', icon: PotatoIcon, disabled: running || !game.installed, onClick: () => void s.launch(game.id, 'potato') },
+    { label: 'Play with Boost', icon: Zap, disabled: running || !game.installed, onClick: () => void s.launch(game.id, 'boost') },
     { label: 'View details', icon: Info, onClick: () => s.navigate({ page: 'game', id: game.id }) },
     { separator: true, label: '' },
     { label: game.favorite ? 'Remove from favorites' : 'Add to favorites', icon: Star, onClick: () => void s.toggleFavorite(game.id) },

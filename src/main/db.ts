@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { log } from './log'
 
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
 
 let db: Database | null = null
 let dbFile = ''
@@ -92,6 +92,9 @@ function migrate(): void {
     CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at);
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
   `)
+  // v2: per-game launch mode.
+  const cols = new Set(all<{ name: string }>('PRAGMA table_info(games)').map((c) => c.name))
+  if (!cols.has('launch_profile')) d.exec("ALTER TABLE games ADD COLUMN launch_profile TEXT NOT NULL DEFAULT ''")
   d.run('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)', ['schema_version', String(SCHEMA_VERSION)])
 }
 

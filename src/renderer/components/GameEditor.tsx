@@ -5,13 +5,14 @@ import { api } from '../lib/api'
 import { useStore } from '../lib/store'
 import { cx, mediaUrl } from '../lib/format'
 import { Modal } from './Modal'
+import { MODES } from '../lib/modes'
 import { Toggle } from './controls'
 import { GameCover, GameIcon } from './GameArt'
 
 type Form = Required<
   Pick<
     GameInput,
-    'title' | 'exePath' | 'workingDir' | 'launchArgs' | 'launchUri' | 'runAsAdmin' | 'description' | 'developer' | 'cover' | 'icon' | 'hero' | 'favorite' | 'hidden' | 'categoryIds' | 'installDir'
+    'title' | 'exePath' | 'workingDir' | 'launchArgs' | 'launchUri' | 'runAsAdmin' | 'description' | 'developer' | 'cover' | 'icon' | 'hero' | 'favorite' | 'hidden' | 'categoryIds' | 'installDir' | 'launchProfile'
   >
 >
 
@@ -30,7 +31,8 @@ const EMPTY: Form = {
   favorite: false,
   hidden: false,
   categoryIds: [],
-  installDir: ''
+  installDir: '',
+  launchProfile: ''
 }
 
 const IMAGE_FILTERS = [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif', 'ico'] }]
@@ -71,8 +73,8 @@ export function GameEditor() {
   useEffect(() => {
     if (!editor.open) return
     if (existing) {
-      const { title, exePath, workingDir, launchArgs, launchUri, runAsAdmin, description, developer, cover, icon, hero, favorite, hidden, categoryIds, installDir } = existing
-      setForm({ title, exePath, workingDir, launchArgs, launchUri, runAsAdmin, description, developer, cover, icon, hero, favorite, hidden, categoryIds, installDir })
+      const { title, exePath, workingDir, launchArgs, launchUri, runAsAdmin, description, developer, cover, icon, hero, favorite, hidden, categoryIds, installDir, launchProfile } = existing
+      setForm({ title, exePath, workingDir, launchArgs, launchUri, runAsAdmin, description, developer, cover, icon, hero, favorite, hidden, categoryIds, installDir, launchProfile })
       setShowAdvanced(!!(workingDir || launchUri))
     } else {
       const preset = { ...EMPTY, ...(editor.preset as Partial<Form>) }
@@ -260,6 +262,28 @@ export function GameEditor() {
               </div>
             </div>
             <Toggle checked={form.runAsAdmin} onChange={(v) => set('runAsAdmin', v)} />
+          </div>
+          <div>
+            <span className="label">Launch mode</span>
+            <div className="grid grid-cols-5 gap-1.5" role="radiogroup" aria-label="Launch mode">
+              {[{ id: '' as const, name: 'Use default', icon: null }, ...MODES].map((m) => (
+                <button
+                  key={m.id || 'inherit'}
+                  type="button"
+                  role="radio"
+                  aria-checked={form.launchProfile === m.id}
+                  onClick={() => set('launchProfile', m.id)}
+                  className={cx(
+                    'flex h-10 items-center justify-center gap-1.5 rounded-lg border text-xs font-semibold transition-colors',
+                    form.launchProfile === m.id ? 'border-accent bg-accent/15 text-fg' : 'border-line/[0.1] text-muted hover:border-line/25 hover:text-fg'
+                  )}
+                >
+                  {m.icon && <m.icon className="h-3.5 w-3.5" />}
+                  {m.name}
+                </button>
+              ))}
+            </div>
+            <span className="mt-1.5 block text-[11px] text-muted/80">What Play does for this game. The arrow next to Play still lets you pick another mode.</span>
           </div>
           <Field label="Description">
             <textarea className="input h-24 resize-none py-2.5 leading-relaxed" value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="What is this game about?" />

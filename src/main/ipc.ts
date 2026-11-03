@@ -1,7 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
-import type { DeepPartial, GameInput, GamePatch, ScanCandidate, ScanOptions, Settings, StorageInfo } from '@shared/types'
+import type { DeepPartial, GameInput, GamePatch, LaunchPlan, LaunchProfileId, ScanCandidate, ScanOptions, Settings, StorageInfo } from '@shared/types'
+import { PROFILES } from './profiles'
 import * as repo from './repo'
 import * as backup from './backup'
 import { databaseFile, flushNow } from './db'
@@ -19,7 +20,8 @@ export interface IpcContext {
   window: () => BrowserWindow | null
   launcher: GameLauncher
   send: (event: string, payload?: unknown) => void
-  launchGame: (id: string) => Promise<void>
+  launchGame: (id: string, profile?: LaunchProfileId) => Promise<void>
+  planFor: (id: string, profile: LaunchProfileId) => LaunchPlan
   createShortcut: (id: string, where: 'desktop' | 'startMenu') => string
   onSettingsChanged: (prev: Settings, next: Settings) => void
   /** Fetch artwork in the background for games that are missing some (respects the auto-artwork setting). */
@@ -97,7 +99,13 @@ export function registerIpc(ctx: IpcContext): void {
     libraryChanged()
     return g
   })
-  handle('games:launch', (id: unknown) => ctx.launchGame(str(id, 'id')))
+  handle('games:launch', (id: unknown, profile?: unknown) =>
+    ctx.launchGame(str(id, 'id'), PROFILES.includes(profile as LaunchProfileId) ? (profile as LaunchProfileId) : undefined)
+  )
+  handle('games:launchPlans', (id: unknown) => {
+    const gid = str(id, 'id')
+    return Object.fromEntries(PROFILES.map((p) => [p, ctx.planFor(gid, p)]))
+  })
   handle('games:running', () => ctx.launcher.list())
   handle('games:openFolder', async (id: unknown) => {
     const g = repo.requireGame(str(id, 'id'))

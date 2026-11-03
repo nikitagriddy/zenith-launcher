@@ -28,11 +28,13 @@ import { cx, formatBytes, formatDateTime } from '../lib/format'
 import { Segmented, Select, SettingRow, Slider, Toggle } from '../components/controls'
 import { LogoMark, Wordmark } from '../components/Logo'
 import { useUpdateStatus } from '../lib/hooks'
+import { MODES, PotatoIcon } from '../lib/modes'
 
-const TABS: { id: SettingsTab; label: string; icon: typeof Info }[] = [
+const TABS: { id: SettingsTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'general', label: 'General', icon: SlidersHorizontal },
   { id: 'appearance', label: 'Appearance', icon: Palette },
   { id: 'library', label: 'Library', icon: LibraryBig },
+  { id: 'launch', label: 'Launch modes', icon: PotatoIcon },
   { id: 'scanning', label: 'Scanning', icon: Radar },
   { id: 'startup', label: 'Startup', icon: Power },
   { id: 'storage', label: 'Storage', icon: HardDrive },
@@ -369,6 +371,108 @@ function AppearanceTab() {
         </SettingRow>
         <SettingRow title="Show favorites">
           <Toggle checked={a.sidebarShowFavorites} onChange={(v) => set({ sidebarShowFavorites: v })} />
+        </SettingRow>
+      </Card>
+    </>
+  )
+}
+
+// ---------------- Launch modes ----------------
+
+const ENGINE_ROWS: [string, string][] = [
+  ['Unreal Engine', 'Lowest scalability settings, lower render scale and resolution, through -ExecCmds and -ResX/-ResY.'],
+  ['Unity', 'Lowest quality level (when the game uses Unity’s standard names) and resolution.'],
+  ['Source and Source 2', 'Resolution.'],
+  ['Godot', 'Resolution.'],
+  ['Anything else', 'Graphics stay as they are; Boost still applies.']
+]
+
+function LaunchTab() {
+  const l = useStore((s) => s.settings.launch)
+  const update = useStore((s) => s.updateSettings)
+  const set = (patch: Partial<typeof l>) => void update({ launch: patch })
+  const [args, setArgs] = useState(l.customArgs)
+  useEffect(() => setArgs(l.customArgs), [l.customArgs])
+  return (
+    <>
+      <Card title="Default launch mode" description="What Play does for games that don't have their own mode. Pick another mode any time with the arrow next to Play.">
+        <div className="mt-3 grid grid-cols-4 gap-2" role="radiogroup" aria-label="Default launch mode">
+          {MODES.map((m) => (
+            <button
+              key={m.id}
+              role="radio"
+              aria-checked={l.defaultProfile === m.id}
+              onClick={() => set({ defaultProfile: m.id })}
+              className={cx(
+                'rounded-xl border p-3 text-left transition-colors',
+                l.defaultProfile === m.id ? 'border-accent bg-accent/[0.08]' : 'border-line/[0.08] hover:border-line/20'
+              )}
+            >
+              <m.icon className={cx('h-5 w-5', l.defaultProfile === m.id ? 'text-accent' : 'text-muted')} />
+              <div className="mt-2 text-sm font-semibold">{m.name}</div>
+              <div className="mt-0.5 text-xs leading-snug text-muted">{m.tagline}</div>
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      <Card title="Boost" description="Used by Boost, Potato and (if you want) Custom. Everything is undone when the game closes.">
+        <SettingRow title="Top CPU priority" description="Windows gives the game's processes CPU time first.">
+          <Toggle checked={l.boostPriority} onChange={(v) => set({ boostPriority: v })} />
+        </SettingRow>
+        <SettingRow title="Use the high-performance GPU" description="On laptops with two graphics chips, forces the faster one (Windows Graphics setting for the game).">
+          <Toggle checked={l.boostGpu} onChange={(v) => set({ boostGpu: v })} />
+        </SettingRow>
+        <SettingRow title="High performance power plan" description="Switches Windows to High performance while you play and back afterwards. Not every PC has this plan.">
+          <Toggle checked={l.boostPowerPlan} onChange={(v) => set({ boostPowerPlan: v })} />
+        </SettingRow>
+      </Card>
+
+      <Card title="Potato" description="The lowest graphics a game's engine accepts at launch. Your game's own settings files are never edited, so the next normal launch looks like before.">
+        <SettingRow title="Resolution">
+          <Select
+            className="h-9 w-48"
+            value={l.potatoResolution}
+            onChange={(v) => set({ potatoResolution: v })}
+            options={[
+              { value: 'native', label: 'Keep my resolution' },
+              { value: '1600x900', label: '1600 × 900' },
+              { value: '1280x720', label: '1280 × 720' },
+              { value: '960x540', label: '960 × 540' }
+            ]}
+          />
+        </SettingRow>
+        <SettingRow title="Render scale (Unreal Engine)" description="Draws the 3D world at this share of the resolution. Lower is blurrier and faster.">
+          <div className="w-56">
+            <Slider value={l.potatoRenderScale} min={25} max={100} step={5} onChange={(v) => set({ potatoRenderScale: v })} format={(v) => `${v}%`} />
+          </div>
+        </SettingRow>
+        <dl className="mt-3 divide-y divide-line/[0.06] rounded-xl border border-line/[0.08]">
+          {ENGINE_ROWS.map(([engine, what]) => (
+            <div key={engine} className="grid grid-cols-[150px_1fr] gap-4 px-4 py-2.5">
+              <dt className="text-sm font-medium">{engine}</dt>
+              <dd className="text-xs leading-relaxed text-muted">{what}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="mt-3 text-xs leading-relaxed text-muted">
+          Steam games get the options through Steam. Epic, Ubisoft, Riot and Battle.net games can't take launch options, so they get Boost only. Some online games ignore launch options.
+        </p>
+      </Card>
+
+      <Card title="Custom" description="Your own launch options, added after the game's own ones.">
+        <SettingRow title="Launch options">
+          <input
+            className="input h-9 w-72 font-mono text-xs"
+            value={args}
+            placeholder="-dx11 -windowed"
+            onChange={(e) => setArgs(e.target.value)}
+            onBlur={() => args !== l.customArgs && set({ customArgs: args })}
+            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+          />
+        </SettingRow>
+        <SettingRow title="Also apply Boost">
+          <Toggle checked={l.customBoost} onChange={(v) => set({ customBoost: v })} />
         </SettingRow>
       </Card>
     </>
@@ -1089,6 +1193,7 @@ export function SettingsPage({ tab = 'general' }: { tab?: SettingsTab }) {
     general: <GeneralTab />,
     appearance: <AppearanceTab />,
     library: <LibraryTab />,
+    launch: <LaunchTab />,
     scanning: <ScanningTab />,
     startup: <StartupTab />,
     storage: <StorageTab />,

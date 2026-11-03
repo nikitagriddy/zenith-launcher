@@ -21,6 +21,16 @@ export const DEFAULT_SETTINGS: Settings = {
     globalHotkey: 'Control+Alt+Z',
     showNotifications: true
   },
+  launch: {
+    defaultProfile: 'default',
+    potatoResolution: '1280x720',
+    potatoRenderScale: 50,
+    boostPriority: true,
+    boostGpu: true,
+    boostPowerPlan: false,
+    customArgs: '',
+    customBoost: true
+  },
   discord: {
     enabled: true,
     clientId: '',

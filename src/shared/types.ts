@@ -36,8 +36,34 @@ export interface Game {
   launchCount: number
   addedAt: number
   categoryIds: string[]
+  /** Launch mode for this game; '' = use the default from Settings. */
+  launchProfile: LaunchProfileId | ''
   /** Computed: executable / install folder exists on disk. */
   installed: boolean
+}
+
+export type LaunchProfileId = 'default' | 'boost' | 'potato' | 'custom'
+
+export interface GameEngine {
+  id: 'unreal' | 'unity' | 'source' | 'source2' | 'godot' | 'unknown'
+  label: string
+  version?: string
+  /** Unreal games: the real "<Game>-Win64-Shipping.exe" behind the launcher stub. */
+  realExe?: string
+}
+
+/** Everything a launch mode changes for one session, plus plain-language notes for the UI. */
+export interface LaunchPlan {
+  profile: LaunchProfileId
+  /** Extra command-line options, exactly as they're passed to the game. */
+  tokens: string[]
+  priority: 'normal' | 'high'
+  gpu: boolean
+  powerPlan: boolean
+  engine: GameEngine
+  applies: string[]
+  limits: string[]
+  summary: string
 }
 
 export type GameInput = Partial<
@@ -173,6 +199,7 @@ export interface RunningInfo {
   gameId: string
   startedAt: number
   tracking: 'process' | 'waiting'
+  profile: LaunchProfileId
 }
 
 export interface DayStat {
@@ -233,6 +260,16 @@ export interface Settings {
     closeToTray: boolean
     globalHotkey: string
     showNotifications: boolean
+  }
+  launch: {
+    defaultProfile: LaunchProfileId
+    potatoResolution: 'native' | '1600x900' | '1280x720' | '960x540'
+    potatoRenderScale: number
+    boostPriority: boolean
+    boostGpu: boolean
+    boostPowerPlan: boolean
+    customArgs: string
+    customBoost: boolean
   }
   discord: {
     enabled: boolean
@@ -338,7 +375,8 @@ export interface ZenithApi {
     remove(id: string): Promise<void>
     toggleFavorite(id: string): Promise<Game>
     setCategories(id: string, categoryIds: string[]): Promise<Game>
-    launch(id: string): Promise<void>
+    launch(id: string, profile?: LaunchProfileId): Promise<void>
+    launchPlans(id: string): Promise<Record<LaunchProfileId, LaunchPlan>>
     running(): Promise<RunningInfo[]>
     openFolder(id: string): Promise<void>
     createShortcut(id: string, where: 'desktop' | 'startMenu'): Promise<string>

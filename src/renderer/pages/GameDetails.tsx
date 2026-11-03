@@ -1,5 +1,7 @@
-import { useMemo } from 'react'
-import { AlertTriangle, ChevronLeft, FolderOpen, MoreHorizontal, Pencil, Play, ShieldCheck, Star, Trash2 } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { LaunchModePicker } from '../components/LaunchModePicker'
+import { effectiveMode, modeOf } from '../lib/modes'
+import { AlertTriangle, ChevronDown, ChevronLeft, FolderOpen, MoreHorizontal, Pencil, Play, ShieldCheck, Star, Trash2 } from 'lucide-react'
 import { SOURCE_LABELS, type Game } from '@shared/types'
 import { InstallExtras, MediaSection, NewsSection, useGameExtras } from '../components/GameExtras'
 import { api } from '../lib/api'
@@ -14,7 +16,6 @@ const SOURCE: Record<string, string> = { ...SOURCE_LABELS, scan: 'Folder scan' }
 
 function PlayButton({ game }: { game: Game }) {
   const run = useStore((s) => s.running[game.id])
-  const launch = useStore((s) => s.launch)
   const now = useNow(1000, !!run)
   if (run) {
     return (
@@ -24,16 +25,50 @@ function PlayButton({ game }: { game: Game }) {
           <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-accent" />
         </span>
         <div>
-          <div className="readout !text-accent">{run.tracking === 'waiting' ? 'Waiting for game' : 'In session'}</div>
+          <div className="readout !text-accent">
+            {run.tracking === 'waiting' ? 'Waiting for game' : 'In session'}
+            {run.profile && run.profile !== 'default' && ` · ${modeOf(run.profile).name} mode`}
+          </div>
           <div className="num text-lg font-semibold leading-tight">{run.tracking === 'waiting' ? 'Starting…' : formatClock((now - run.startedAt) / 1000)}</div>
         </div>
       </div>
     )
   }
+  return <SplitPlay game={game} />
+}
+
+function SplitPlay({ game }: { game: Game }) {
+  const launch = useStore((s) => s.launch)
+  const settings = useStore((s) => s.settings)
+  const [open, setOpen] = useState(false)
+  const anchor = useRef<HTMLDivElement>(null)
+  const mode = modeOf(effectiveMode(game, settings))
   return (
-    <button className="btn-primary h-14 min-w-[180px] rounded-xl px-8 text-lg tracking-wide" disabled={!game.installed} onClick={() => void launch(game.id)}>
-      <Play className="h-5 w-5" fill="currentColor" /> PLAY
-    </button>
+    <div ref={anchor} className="flex h-14">
+      <button
+        className="btn-primary h-14 min-w-[170px] rounded-xl rounded-r-none px-7 text-lg tracking-wide"
+        disabled={!game.installed}
+        onClick={() => void launch(game.id)}
+        title={`Play (${mode.name} mode)`}
+      >
+        {mode.id === 'default' ? <Play className="h-5 w-5" fill="currentColor" /> : <mode.icon className="h-5 w-5" />}
+        <span className="flex flex-col items-start leading-none">
+          PLAY
+          {mode.id !== 'default' && <span className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] opacity-80">{mode.name}</span>}
+        </span>
+      </button>
+      <button
+        className="btn-primary h-14 w-11 rounded-xl rounded-l-none border-l border-on-accent/20 px-0"
+        disabled={!game.installed}
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Choose launch mode"
+        aria-expanded={open}
+        title="Choose launch mode"
+      >
+        <ChevronDown className={cx('h-5 w-5 transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && anchor.current && <LaunchModePicker game={game} anchor={anchor.current} onClose={() => setOpen(false)} />}
+    </div>
   )
 }
 
@@ -75,6 +110,7 @@ export function GameDetailsPage({ id }: { id: string }) {
   const lastPlayed = game?.lastPlayed
   const sessions = useAsync(() => api.games.sessions(id, 30), [id, lastPlayed, game?.playtimeSec])
   const extras = useGameExtras(id, game?.title ?? '')
+  const engine = useAsync(() => api.games.launchPlans(id).then((p) => p.default.engine), [id, game?.exePath, game?.installDir])
 
   const maxSession = useMemo(() => Math.max(1, ...(sessions.data ?? []).map((s) => s.durationSec)), [sessions.data])
 
@@ -234,6 +270,10 @@ export function GameDetailsPage({ id }: { id: string }) {
             <div className="mb-1 flex items-center gap-3">
               <GameIcon game={game} size={36} />
               <h2 className="section-title">Installation</h2>
+            </div>
+            <div className="py-2.5">
+              <div className="readout mb-1">Engine</div>
+              <div className="text-sm">{engine.data ? engine.data.label : '…'}</div>
             </div>
             <PathRow label="Location" value={game.installDir} onOpen={() => void attempt(() => api.games.openFolder(game.id), 'Could not open folder')} />
             <PathRow label="Executable" value={game.exePath} onOpen={game.installed && game.exePath ? () => showItem(game.exePath) : undefined} />

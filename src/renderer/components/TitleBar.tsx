@@ -5,6 +5,7 @@ import { api } from '../lib/api'
 import { useStore } from '../lib/store'
 import { cx, formatClock } from '../lib/format'
 import { useNow, useUpdateStatus } from '../lib/hooks'
+import { modeOf } from '../lib/modes'
 import { Wordmark } from './Logo'
 
 function RunningIndicator() {
@@ -26,6 +27,14 @@ function RunningIndicator() {
         <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
       </span>
       <span className="readout !text-accent">{first.tracking === 'waiting' ? 'Starting' : 'In session'}</span>
+      {first.profile && first.profile !== 'default' && (() => {
+        const m = modeOf(first.profile)
+        return (
+          <span className="flex items-center gap-1 rounded-md bg-accent px-1.5 py-0.5 text-[10px] font-bold text-on-accent" title={`${m.name} mode`}>
+            <m.icon className="h-3 w-3" /> {m.name}
+          </span>
+        )
+      })()}
       <span className="max-w-[160px] truncate text-xs font-semibold">{g?.title ?? 'Game'}</span>
       {first.tracking === 'process' && <span className="num text-xs text-fg/80">{formatClock((now - first.startedAt) / 1000)}</span>}
       {list.length > 1 && <span className="readout">+{list.length - 1}</span>}

@@ -1,11 +1,11 @@
 import { create } from 'zustand'
 import type { ComponentType } from 'react'
-import type { Category, DeepPartial, FreeDealsResult, Game, GameInput, RunningInfo, Settings, ToastPayload } from '@shared/types'
+import type { Category, DeepPartial, FreeDealsResult, LaunchProfileId, Game, GameInput, RunningInfo, Settings, ToastPayload } from '@shared/types'
 import { DEFAULT_SETTINGS, mergeSettings } from '@shared/settings'
 import { api } from './api'
 import type { LibFilter } from './library'
 
-export type SettingsTab = 'general' | 'appearance' | 'library' | 'scanning' | 'startup' | 'storage' | 'data' | 'shortcuts' | 'updates' | 'about'
+export type SettingsTab = 'general' | 'appearance' | 'library' | 'scanning' | 'startup' | 'storage' | 'data' | 'shortcuts' | 'updates' | 'launch' | 'about'
 
 export type Route =
   | { page: 'home' }
@@ -68,7 +68,7 @@ interface Actions {
   goBack(): void
   goForward(): void
   updateSettings(patch: DeepPartial<Settings>): Promise<void>
-  launch(id: string): Promise<void>
+  launch(id: string, profile?: LaunchProfileId): Promise<void>
   toggleFavorite(id: string): Promise<void>
   removeGame(id: string): Promise<boolean>
   openEditor(gameId?: string, preset?: Partial<GameInput>): void
@@ -226,10 +226,10 @@ export const useStore = create<State & Actions>((set, get) => ({
     }
   },
 
-  async launch(id) {
+  async launch(id, profile) {
     const g = get().games.find((x) => x.id === id)
     try {
-      await api.games.launch(id)
+      await api.games.launch(id, profile)
     } catch (err) {
       get().toast('error', g ? `Can't launch ${g.title}` : 'Launch failed', (err as Error).message)
     }
