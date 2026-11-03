@@ -23,7 +23,10 @@ const SOFT_PENALTY = /(config|settings|setup|tool|editor|server|dedicated|benchm
 export const SYSTEM_PROCESS_NAMES = new Set([
   'explorer.exe', 'cmd.exe', 'conhost.exe', 'powershell.exe', 'pwsh.exe', 'steam.exe', 'steamwebhelper.exe',
   'epicgameslauncher.exe', 'epicwebhelper.exe', 'node.exe', 'python.exe', 'pythonw.exe', 'java.exe',
-  'rundll32.exe', 'dllhost.exe', 'svchost.exe', 'zenith.exe', 'electron.exe', 'msedge.exe', 'chrome.exe'
+  'rundll32.exe', 'dllhost.exe', 'svchost.exe', 'zenith.exe', 'electron.exe', 'msedge.exe', 'chrome.exe',
+  'riotclientservices.exe', 'riotclientux.exe', 'riotclientuxrender.exe', 'riotclientcrashhandler.exe', 'battle.net.exe',
+  'agent.exe', 'ubisoftconnect.exe', 'upc.exe', 'uplaywebcore.exe', 'eadesktop.exe', 'eabackgroundservice.exe',
+  'galaxyclient.exe', 'galaxyclient helper.exe', 'gogalaxy.exe'
 ])
 
 export function normalize(s: string): string {

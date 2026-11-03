@@ -1,4 +1,17 @@
-export type GameSource = 'manual' | 'scan' | 'steam' | 'epic' | 'import'
+export type GameSource = 'manual' | 'scan' | 'steam' | 'epic' | 'gog' | 'ea' | 'ubisoft' | 'battlenet' | 'riot' | 'import'
+
+export const SOURCE_LABELS: Record<GameSource, string> = {
+  manual: 'Manual',
+  scan: 'Folder',
+  steam: 'Steam',
+  epic: 'Epic Games',
+  gog: 'GOG',
+  ea: 'EA app',
+  ubisoft: 'Ubisoft Connect',
+  battlenet: 'Battle.net',
+  riot: 'Riot Games',
+  import: 'Imported'
+}
 
 export interface Game {
   id: string
@@ -62,6 +75,7 @@ export interface ScanCandidate {
   source: GameSource
   sourceId: string
   launchUri: string
+  launchArgs?: string
   alternatives: ExeOption[]
   coverFile: string
   heroFile: string
@@ -79,7 +93,7 @@ export interface ScanResult {
 }
 
 export interface ScanProgress {
-  phase: 'folders' | 'steam' | 'epic' | 'done'
+  phase: 'folders' | 'steam' | 'epic' | 'stores' | 'done'
   current: string
   found: number
 }
@@ -103,6 +117,49 @@ export interface UpdateStatus {
   checkedAt?: number
   /** Downloaded and set to auto-install, but waiting for running games to close. */
   waitingForGames?: boolean
+}
+
+export interface GameExtras {
+  title: string
+  steamAppId: string | null
+  storeUrl: string | null
+  trailer: { name: string; thumbnail: string; hls: string | null; mp4: string | null } | null
+  screenshots: { thumb: string; full: string }[]
+  news: { id: string; title: string; url: string; author: string; date: number; excerpt: string }[]
+  offline: boolean
+}
+
+export interface InstallSize {
+  bytes: number
+  files: number
+  partial: boolean
+  dir: string
+  computedAt: number
+}
+
+export interface UninstallInfo {
+  available: boolean
+  label: string
+}
+
+export interface FreeDeal {
+  id: string
+  title: string
+  store: string
+  image: string
+  /** Original price, e.g. "$24.99" (may be empty when unknown). */
+  worth: string
+  description: string
+  startsAt: number | null
+  endsAt: number | null
+  upcoming: boolean
+  url: string
+}
+
+export interface FreeDealsResult {
+  deals: FreeDeal[]
+  fetchedAt: number
+  errors: string[]
 }
 
 export interface RunningInfo {
@@ -209,6 +266,11 @@ export interface Settings {
     depth: number
     detectSteam: boolean
     detectEpic: boolean
+    detectGog: boolean
+    detectEa: boolean
+    detectUbisoft: boolean
+    detectBattlenet: boolean
+    detectRiot: boolean
     autoImport: boolean
     excludeKeywords: string[]
   }
@@ -299,6 +361,15 @@ export interface ZenithApi {
   }
   stats: {
     get(): Promise<StatsSummary>
+  }
+  extras: {
+    get(gameId: string): Promise<GameExtras>
+    size(gameId: string, refresh?: boolean): Promise<InstallSize | null>
+    uninstallInfo(gameId: string): Promise<UninstallInfo>
+    uninstall(gameId: string): Promise<string>
+  }
+  deals: {
+    list(force?: boolean): Promise<FreeDealsResult>
   }
   art: {
     fetch(gameId: string): Promise<boolean>

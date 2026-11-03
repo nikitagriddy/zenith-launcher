@@ -634,6 +634,21 @@ function ScanningTab() {
         <SettingRow title="Detect Epic Games" description="Reads Epic Games Launcher install manifests.">
           <Toggle checked={sc.detectEpic} onChange={(v) => set({ detectEpic: v })} />
         </SettingRow>
+        <SettingRow title="Detect GOG Galaxy" description="GOG games registered on this PC. Box art comes from GOG.">
+          <Toggle checked={sc.detectGog} onChange={(v) => set({ detectGog: v })} />
+        </SettingRow>
+        <SettingRow title="Detect EA app" description="EA and Origin games from the Windows app list.">
+          <Toggle checked={sc.detectEa} onChange={(v) => set({ detectEa: v })} />
+        </SettingRow>
+        <SettingRow title="Detect Ubisoft Connect" description="Games launch through Ubisoft Connect.">
+          <Toggle checked={sc.detectUbisoft} onChange={(v) => set({ detectUbisoft: v })} />
+        </SettingRow>
+        <SettingRow title="Detect Battle.net" description="Blizzard and Activision games. They open through Battle.net.">
+          <Toggle checked={sc.detectBattlenet} onChange={(v) => set({ detectBattlenet: v })} />
+        </SettingRow>
+        <SettingRow title="Detect Riot Games" description="VALORANT, League of Legends and more, launched through the Riot Client.">
+          <Toggle checked={sc.detectRiot} onChange={(v) => set({ detectRiot: v })} />
+        </SettingRow>
         <SettingRow title="Folder search depth" description="How many levels below each game folder to look for executables.">
           <div className="w-48">
             <Slider value={sc.depth} min={1} max={6} onChange={(v) => set({ depth: v })} />
@@ -910,7 +925,8 @@ const KEYS: [string, string][] = [
   ['Ctrl + Shift + S', 'Scan for games'],
   ['Ctrl + 1', 'Overview'],
   ['Ctrl + 2', 'Library'],
-  ['Ctrl + 3', 'Statistics'],
+  ['Ctrl + 3', 'Discount games'],
+  ['Ctrl + 4', 'Statistics'],
   ['Ctrl + ,', 'Settings'],
   ['Alt + ←  /  Alt + →', 'Back / forward'],
   ['Mouse back / forward', 'Back / forward'],

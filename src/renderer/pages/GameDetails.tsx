@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { AlertTriangle, ChevronLeft, FolderOpen, MoreHorizontal, Pencil, Play, ShieldCheck, Star, Trash2 } from 'lucide-react'
-import type { Game } from '@shared/types'
+import { SOURCE_LABELS, type Game } from '@shared/types'
+import { InstallExtras, MediaSection, NewsSection, useGameExtras } from '../components/GameExtras'
 import { api } from '../lib/api'
 import { useGame, useStore } from '../lib/store'
 import { cx, formatClock, formatDate, formatDateTime, formatPlaytime, formatRelative } from '../lib/format'
@@ -9,7 +10,7 @@ import { useAsync, useNow } from '../lib/hooks'
 import { AmbientArt, GameCover, GameIcon } from '../components/GameArt'
 import { Empty, Toggle } from '../components/controls'
 
-const SOURCE: Record<string, string> = { manual: 'Manual', scan: 'Folder scan', steam: 'Steam', epic: 'Epic Games', import: 'Imported' }
+const SOURCE: Record<string, string> = { ...SOURCE_LABELS, scan: 'Folder scan' }
 
 function PlayButton({ game }: { game: Game }) {
   const run = useStore((s) => s.running[game.id])
@@ -73,6 +74,7 @@ export function GameDetailsPage({ id }: { id: string }) {
   const { navigate, goBack, toggleFavorite, openEditor, removeGame, openMenu, attempt, toast } = useStore.getState()
   const lastPlayed = game?.lastPlayed
   const sessions = useAsync(() => api.games.sessions(id, 30), [id, lastPlayed, game?.playtimeSec])
+  const extras = useGameExtras(id, game?.title ?? '')
 
   const maxSession = useMemo(() => Math.max(1, ...(sessions.data ?? []).map((s) => s.durationSec)), [sessions.data])
 
@@ -175,6 +177,7 @@ export function GameDetailsPage({ id }: { id: string }) {
 
       <div className="mt-10 grid grid-cols-[minmax(0,1fr)_320px] gap-6 px-8">
         <div className="space-y-6">
+          <MediaSection extras={extras.data} loading={extras.loading} />
           <section className="panel p-6">
             <h2 className="section-title mb-3">About</h2>
             {game.description ? (
@@ -216,6 +219,7 @@ export function GameDetailsPage({ id }: { id: string }) {
               </div>
             )}
           </section>
+          <NewsSection extras={extras.data} loading={extras.loading} />
         </div>
 
         <aside className="space-y-6">
@@ -250,6 +254,7 @@ export function GameDetailsPage({ id }: { id: string }) {
                 }
               />
             </div>
+            <InstallExtras game={game} />
           </section>
         </aside>
       </div>

@@ -1,7 +1,7 @@
 {
   "name": "zenith-launcher",
   "productName": "Zenith",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Zenith - a fast, beautiful game launcher for Windows.",
   "main": "out/main/index.js",
   "author": "Zenith",
@@ -38,6 +38,7 @@
     "electron": "37.10.3",
     "electron-builder": "26.0.20",
     "esbuild": "^0.25.12",
+    "hls.js": "^1.7.4",
     "lucide-react": "^0.468.0",
     "playwright-core": "1.52.0",
     "postcss": "^8.4.49",

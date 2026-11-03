@@ -18,6 +18,11 @@ interface RunState {
   child: ChildProcess | null
   /** Give up waiting for a process to appear after this timestamp. */
   waitUntil: number
+  /** Waiting after a stub exited: on timeout, keep the time already played instead of reporting an error. */
+  quietWait: boolean
+  exitedAt?: number
+  /** Store game or launcher exe: its process may hand off to the real game. */
+  stubLike?: boolean
   finished: boolean
 }
 
@@ -67,6 +72,13 @@ function runningImageNames(): Promise<Set<string>> {
   })
 }
 
+/** Stores whose games launch best through their URI (DRM / client checks). */
+const URI_SOURCES = new Set(['steam', 'epic', 'ubisoft'])
+/** Store clients we start for the game; the client itself must never count as "playing". */
+const CLIENT_EXES = new Set(['riotclientservices.exe', 'battle.net.exe'])
+/** Sources whose exe often exits right away and hands off to the real game process. */
+const STUB_SOURCES = new Set(['ea', 'gog', 'battlenet', 'ubisoft', 'riot', 'epic', 'steam'])
+
 function psQuote(s: string): string {
   return `'${s.replace(/'/g, "''")}'`
 }
@@ -100,7 +112,9 @@ export class GameLauncher extends EventEmitter<LauncherEvents> {
     if (this.running.has(game.id)) throw new Error(`${game.title} is already running.`)
 
     const exeOk = !!game.exePath && fs.existsSync(game.exePath)
-    const useUri = !!game.launchUri && (!exeOk || game.source === 'steam' || game.source === 'epic')
+    const useUri = !!game.launchUri && (!exeOk || URI_SOURCES.has(game.source))
+    // Riot / Battle.net: we start the store client, which then starts the game. Track the game, not the client.
+    const viaClient = !useUri && (CLIENT_EXES.has(path.basename(game.exePath).toLowerCase()) || (game.source === 'battlenet' && /launcher\.exe$/i.test(game.exePath)))
     if (!useUri && !game.exePath) throw new Error('No executable set for this game. Edit the game and choose its .exe file.')
     if (!useUri && !exeOk) throw new Error(`Executable not found:\n${game.exePath}\nThe game may have been moved or uninstalled.`)
 
@@ -115,8 +129,11 @@ export class GameLauncher extends EventEmitter<LauncherEvents> {
       timer: null,
       child: null,
       waitUntil: 0,
+      quietWait: false,
+      stubLike: STUB_SOURCES.has(game.source) || /launcher/i.test(path.basename(game.exePath)),
       finished: false
     }
+    if (viaClient) for (const n of [...state.exeNames]) if (/launcher|crash|report|setup|unins/i.test(n)) state.exeNames.delete(n)
 
     if (useUri) {
       await shell.openExternal(game.launchUri)
@@ -127,6 +144,9 @@ export class GameLauncher extends EventEmitter<LauncherEvents> {
       const ext = path.extname(game.exePath).toLowerCase()
       if (game.runAsAdmin) {
         this.spawnElevated(state, game.exePath, game.launchArgs, cwd)
+      } else if (viaClient) {
+        await this.spawnDirect(state, game.exePath, args, cwd, false, false)
+        this.beginWaiting(state, 180_000)
       } else if (ext === '.exe') {
         try {
           await this.spawnDirect(state, game.exePath, args, cwd)
@@ -155,14 +175,15 @@ export class GameLauncher extends EventEmitter<LauncherEvents> {
     this.emit('changed')
   }
 
-  private spawnDirect(state: RunState, file: string, args: string[], cwd: string, useShell = false): Promise<void> {
+  private spawnDirect(state: RunState, file: string, args: string[], cwd: string, useShell = false, track = true): Promise<void> {
     return new Promise((resolve, reject) => {
       const child = spawn(file, args, { cwd, detached: true, stdio: 'ignore', windowsHide: false, shell: useShell })
       let spawned = false
       child.once('spawn', () => {
         spawned = true
-        state.child = child
         child.unref()
+        if (!track) return resolve()
+        state.child = child
         resolve()
       })
       child.once('error', (err) => {
@@ -170,7 +191,7 @@ export class GameLauncher extends EventEmitter<LauncherEvents> {
         else log.error('Game process error', err)
       })
       child.once('exit', () => {
-        if (!spawned) return
+        if (!spawned || !track) return
         state.child = null
         void this.afterExit(state)
       })
@@ -218,6 +239,11 @@ export class GameLauncher extends EventEmitter<LauncherEvents> {
     if ([...state.exeNames].some((n) => names.has(n))) {
       state.tracking = 'process'
       this.schedulePoll(state, 5000)
+    } else if (state.stubLike && Date.now() - state.launchedAt < 30_000) {
+      // A store game's launcher exited fast: the real game is probably about to start (EA, GOG, Battle.net…).
+      state.exitedAt = Date.now()
+      state.quietWait = true
+      this.beginWaiting(state, 45_000)
     } else {
       this.finish(state, true)
     }
@@ -243,11 +269,17 @@ export class GameLauncher extends EventEmitter<LauncherEvents> {
     if (state.tracking === 'waiting') {
       if (alive) {
         state.tracking = 'process'
-        state.startedAt = Date.now()
+        if (!state.exitedAt) state.startedAt = Date.now()
+        state.exitedAt = 0
         this.emit('changed')
         return this.schedulePoll(state, 5000)
       }
       if (Date.now() > state.waitUntil || state.exeNames.size === 0) {
+        if (state.quietWait) {
+          // Nothing else showed up: the first process was the game. Keep the time it ran.
+          state.tracking = 'process'
+          return this.finish(state, true, state.exitedAt || Date.now())
+        }
         this.emit('error', {
           gameId: state.gameId,
           title: state.title,
@@ -261,7 +293,7 @@ export class GameLauncher extends EventEmitter<LauncherEvents> {
     this.finish(state, true)
   }
 
-  private finish(state: RunState, tracked: boolean): void {
+  private finish(state: RunState, tracked: boolean, endedAt = Date.now()): void {
     if (state.finished) return
     state.finished = true
     if (state.timer) clearTimeout(state.timer)
@@ -270,7 +302,7 @@ export class GameLauncher extends EventEmitter<LauncherEvents> {
       gameId: state.gameId,
       title: state.title,
       startedAt: state.startedAt,
-      endedAt: Date.now(),
+      endedAt,
       tracked: tracked && state.tracking === 'process'
     })
     this.emit('changed')

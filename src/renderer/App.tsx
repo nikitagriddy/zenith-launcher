@@ -14,6 +14,7 @@ import { HomePage } from './pages/Home'
 import { LibraryPage } from './pages/Library'
 import { GameDetailsPage } from './pages/GameDetails'
 import { StatsPage } from './pages/Stats'
+import { DealsPage } from './pages/Deals'
 import { SettingsPage } from './pages/Settings'
 
 const LAUNCHABLE = /\.(exe|lnk|url|bat|cmd)$/i
@@ -53,6 +54,9 @@ function Page() {
       break
     case 'stats':
       content = <StatsPage />
+      break
+    case 'deals':
+      content = <DealsPage />
       break
     case 'settings':
       content = <SettingsPage tab={route.tab} />
@@ -105,9 +109,9 @@ export default function App() {
       } else if (e.ctrlKey && e.key === ',') {
         e.preventDefault()
         s().navigate({ page: 'settings' })
-      } else if (e.ctrlKey && ['1', '2', '3'].includes(e.key) && !modalOpen) {
+      } else if (e.ctrlKey && ['1', '2', '3', '4'].includes(e.key) && !modalOpen) {
         e.preventDefault()
-        s().navigate({ page: (['home', 'library', 'stats'] as const)[Number(e.key) - 1]! })
+        s().navigate({ page: (['home', 'library', 'deals', 'stats'] as const)[Number(e.key) - 1]! })
       } else if (e.altKey && e.key === 'ArrowLeft' && !typing) {
         e.preventDefault()
         s().goBack()

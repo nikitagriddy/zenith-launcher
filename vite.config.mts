@@ -16,9 +16,12 @@ const csp: Plugin = {
       "default-src 'self'",
       "script-src 'self'",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: zenith-media:",
+      // Store artwork, screenshots, trailers and free-game images load straight from their CDNs.
+      "img-src 'self' data: blob: zenith-media: https:",
+      "media-src 'self' blob: https:",
+      "worker-src 'self' blob:",
       "font-src 'self' data:",
-      "connect-src 'self' zenith-media:"
+      "connect-src 'self' zenith-media: https:"
     ].join('; ')
     return html.replace('<head>', `<head>\n    <meta http-equiv="Content-Security-Policy" content="${policy}" />`)
   }

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { ComponentType } from 'react'
-import type { Category, DeepPartial, Game, GameInput, RunningInfo, Settings, ToastPayload } from '@shared/types'
+import type { Category, DeepPartial, FreeDealsResult, Game, GameInput, RunningInfo, Settings, ToastPayload } from '@shared/types'
 import { DEFAULT_SETTINGS, mergeSettings } from '@shared/settings'
 import { api } from './api'
 import type { LibFilter } from './library'
@@ -12,6 +12,7 @@ export type Route =
   | { page: 'library'; categoryId?: string; filter?: LibFilter }
   | { page: 'game'; id: string }
   | { page: 'stats' }
+  | { page: 'deals' }
   | { page: 'settings'; tab?: SettingsTab }
 
 export interface Toast extends ToastPayload {
@@ -52,6 +53,11 @@ interface State {
   menu: { x: number; y: number; items: MenuItem[] } | null
   search: string
   searchFocusTick: number
+  deals: FreeDealsResult | null
+  dealsLoading: boolean
+  dealsError: string | null
+  /** Free-now deals the user hasn't seen on the Discount Games page yet. */
+  dealsUnseen: number
 }
 
 interface Actions {
@@ -76,8 +82,19 @@ interface Actions {
   closeMenu(): void
   setSearch(s: string): void
   focusSearch(): void
+  loadDeals(force: boolean): Promise<void>
+  markDealsSeen(): void
   /** Run an async action, reporting failures as a toast. Returns undefined on failure. */
   attempt<T>(fn: () => Promise<T>, errorTitle?: string): Promise<T | undefined>
+}
+
+const SEEN_KEY = 'zenith.dealsSeen'
+function readSeen(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(SEEN_KEY) ?? '[]') as string[])
+  } catch {
+    return new Set()
+  }
 }
 
 let toastId = 1
@@ -101,6 +118,34 @@ export const useStore = create<State & Actions>((set, get) => ({
   menu: null,
   search: '',
   searchFocusTick: 0,
+  deals: null,
+  dealsLoading: false,
+  dealsError: null,
+  dealsUnseen: 0,
+
+  async loadDeals(force) {
+    if (get().dealsLoading) return
+    set({ dealsLoading: true })
+    try {
+      const deals = await api.deals.list(force)
+      const seen = readSeen()
+      const unseen = deals.deals.filter((d) => !d.upcoming && !seen.has(d.id)).length
+      set({ deals, dealsError: null, dealsUnseen: get().route.page === 'deals' ? 0 : unseen })
+    } catch (err) {
+      set({ dealsError: (err as Error).message })
+    } finally {
+      set({ dealsLoading: false })
+    }
+  },
+  markDealsSeen() {
+    const ids = (get().deals?.deals ?? []).filter((d) => !d.upcoming).map((d) => d.id)
+    try {
+      localStorage.setItem(SEEN_KEY, JSON.stringify(ids))
+    } catch {
+      /* storage unavailable: badge just reappears next launch */
+    }
+    if (get().dealsUnseen) set({ dealsUnseen: 0 })
+  },
 
   async boot() {
     const [settings, games, categories, running] = await Promise.all([
@@ -131,6 +176,9 @@ export const useStore = create<State & Actions>((set, get) => ({
       api.on('navigate', (r: Route) => get().navigate(r)),
       api.on('data:restored', () => window.location.reload())
     ]
+    // Fill the Discount Games badge in the background; refresh every hour.
+    setTimeout(() => void get().loadDeals(false), 3000)
+    setInterval(() => void get().loadDeals(false), 3600_000)
   },
 
   async refreshGames() {

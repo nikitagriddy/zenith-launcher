@@ -75,6 +75,7 @@ export async function importCandidates(candidates: ScanCandidate[]): Promise<Imp
         exePath: c.exePath && fs.existsSync(c.exePath) ? c.exePath : '',
         installDir: c.installDir,
         launchUri: c.launchUri,
+        launchArgs: c.launchArgs ?? '',
         source: c.source,
         sourceId: c.sourceId,
         cover: copy(c.coverFile, 'cover'),

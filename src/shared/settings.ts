@@ -59,6 +59,11 @@ export const DEFAULT_SETTINGS: Settings = {
     depth: 3,
     detectSteam: true,
     detectEpic: true,
+    detectGog: true,
+    detectEa: true,
+    detectUbisoft: true,
+    detectBattlenet: true,
+    detectRiot: true,
     autoImport: true,
     excludeKeywords: []
   },

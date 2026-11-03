@@ -6,6 +6,7 @@ import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { execFileSync, spawn } from 'node:child_process'
 
 const root = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
 const require = createRequire(import.meta.url)
@@ -60,7 +61,7 @@ await shot('01-onboarding')
 
 // Test-only: avoid window minimizing during launch, disable store detection.
 await api(
-  (f) => window.zenith.settings.set({ general: { minimizeOnLaunch: false }, library: { autoArtwork: false }, scanning: { folders: [f], detectSteam: false, detectEpic: false } }),
+  (f) => window.zenith.settings.set({ general: { minimizeOnLaunch: false }, library: { autoArtwork: false }, scanning: { folders: [f], detectSteam: false, detectEpic: false, detectGog: false, detectEa: false, detectUbisoft: false, detectBattlenet: false, detectRiot: false } }),
   games
 )
 
@@ -108,6 +109,87 @@ const dbd = await api((exe) => window.zenith.games.add({ title: 'Dead by Dayligh
 const gotArt = await api((id) => window.zenith.art.fetch(id), dbd.id)
 const dbdAfter = await api((id) => window.zenith.games.list().then((l) => l.find((g) => g.id === id)), dbd.id)
 check(gotArt && !!dbdAfter.cover && !!dbdAfter.hero && !!dbdAfter.description, `real cover, banner and description downloaded (${dbdAfter.developer || 'no dev'})`)
+
+// ---- Game page extras (Steam trailer, screenshots, news) ----
+const ex = await api((id) => window.zenith.extras.get(id), dbd.id)
+check(!!ex.trailer && ex.screenshots.length >= 3 && ex.news.length > 0, `extras: trailer + ${ex.screenshots.length} screenshots + ${ex.news.length} news`)
+await page.getByRole('button', { name: 'Library' }).first().click()
+await page.getByText('Dead by Daylight').first().click()
+await page.getByRole('button', { name: 'Play trailer' }).waitFor({ timeout: 15000 })
+await page.getByRole('button', { name: 'Play trailer' }).click()
+const played = await (async () => {
+  const end = Date.now() + 20000
+  while (Date.now() < end) {
+    const t = await page.evaluate(() => document.querySelector('video')?.currentTime ?? 0)
+    if (t > 1) return t
+    await page.waitForTimeout(500)
+  }
+  return 0
+})()
+check(played > 1, `Steam trailer streams in the app (played ${played.toFixed(1)}s)`)
+await page.evaluate(() => document.querySelector('video')?.pause())
+await page.mouse.wheel(0, 500)
+await page.waitForTimeout(600)
+await shot('11-game-extras')
+const size = await api((id) => window.zenith.extras.size(id, true), pq.id)
+check(!!size && size.bytes > 1000 && size.files >= 1, `install size measured (${size?.bytes} bytes)`)
+const sd = (await api(() => window.zenith.games.list())).find((g) => g.title.startsWith('Star'))
+const un = await api((id) => window.zenith.extras.uninstallInfo(id), sd.id)
+check(un.available && /uninstaller/i.test(un.label), `uninstaller found in game folder (${un.label})`)
+const un2 = await api((id) => window.zenith.extras.uninstallInfo(id), pq.id)
+check(!un2.available, 'no fake uninstaller offered when none exists')
+const un3 = await api((id) => window.zenith.extras.uninstallInfo(id), dbd.id)
+check(!un3.available, `same-name game elsewhere on disk is never uninstalled by mistake (${un3.label})`)
+
+// ---- Discount Games (100% off) ----
+const deals = await api(() => window.zenith.deals.list(true))
+check(deals.deals.length > 0 && deals.deals.every((d) => d.url.startsWith('https://')), `free games loaded: ${deals.deals.length} (${[...new Set(deals.deals.map((d) => d.store))].join(', ')})`)
+await page.getByRole('button', { name: 'Discount Games' }).click()
+await page.getByRole('heading', { name: 'Free right now' }).waitFor({ timeout: 15000 })
+await page.waitForTimeout(1500)
+await shot('12-discount-games')
+
+// ---- Other stores: temporary fake registry entries (removed in finally) ----
+const UN = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\'
+const stores = join(data, 'Stores')
+const riotDir = join(stores, 'ZenithRiotGame'), riotClient = join(stores, 'RiotClient', 'RiotClientServices.exe')
+const eaDir = join(stores, 'ZenithEAGame'), bnDir = join(stores, 'ZenithBlizzGame')
+for (const d of [riotDir, join(stores, 'RiotClient'), eaDir, join(bnDir, '_retail_')]) mkdirSync(d, { recursive: true })
+copyFileSync(ping, riotClient)
+copyFileSync(ping, join(riotDir, 'ZenithRiotGame.exe'))
+copyFileSync(ping, join(eaDir, 'ZenithEAGame.exe'))
+copyFileSync(ping, join(bnDir, 'Zenith Blizz Game Launcher.exe'))
+copyFileSync(ping, join(bnDir, '_retail_', 'ZenithBlizz.exe'))
+const reg = (key, vals) => { for (const [n, v] of Object.entries(vals)) execFileSync('reg', ['add', UN + key, '/v', n, '/t', 'REG_SZ', '/d', v, '/f'], { stdio: 'ignore' }) }
+const keys = ['Riot Game zenithtest.live', 'ZenithTestEA', 'ZenithTestBnet']
+try {
+  reg(keys[0], { DisplayName: 'Zenith Riot Game', Publisher: 'Riot Games, Inc', InstallLocation: riotDir, UninstallString: `"${riotClient}" --uninstall-product=zenithtest --uninstall-patchline=live` })
+  reg(keys[1], { DisplayName: 'Zenith EA Game', Publisher: 'Electronic Arts', InstallLocation: eaDir, UninstallString: `"${join(eaDir, 'ZenithEAGame.exe')}"` })
+  reg(keys[2], { DisplayName: 'Zenith Blizz Game', Publisher: 'Blizzard Entertainment', InstallLocation: bnDir, UninstallString: '"C:\\ProgramData\\Battle.net\\Agent\\Blizzard Uninstaller.exe" --lang=enUS --uid=zenithtest --displayname="Zenith Blizz Game"' })
+  await api(() => window.zenith.settings.set({ scanning: { detectEa: true, detectBattlenet: true, detectRiot: true } }))
+  const sr = await api(() => window.zenith.scan.run({ folders: [] }))
+  const riotC = sr.candidates.find((c) => c.source === 'riot')
+  const eaC = sr.candidates.find((c) => c.source === 'ea' && c.title === 'Zenith EA Game')
+  const bnC = sr.candidates.find((c) => c.source === 'battlenet')
+  check(!!riotC && riotC.exePath.endsWith('RiotClientServices.exe') && /--launch-product=zenithtest/.test(riotC.launchArgs), 'Riot game detected, launches through Riot Client')
+  check(!!eaC && eaC.exePath.endsWith('ZenithEAGame.exe'), 'EA app game detected')
+  check(!!bnC && /Launcher.exe$/.test(bnC.exePath), 'Battle.net game detected, launches through its launcher')
+  check(!sr.candidates.some((c) => /riot client/i.test(c.title)), 'Riot Client itself is not listed as a game')
+  await api((c) => window.zenith.scan.importCandidates(c), [riotC])
+  const rg = (await api(() => window.zenith.games.list())).find((g) => g.source === 'riot')
+  // Launch: Zenith starts the (fake) Riot Client, then the "game" starts a moment later like the real thing.
+  await api((id) => window.zenith.games.launch(id), rg.id)
+  await page.waitForTimeout(3000)
+  spawn(join(riotDir, 'ZenithRiotGame.exe'), ['-n', '6', '127.0.0.1'], { stdio: 'ignore', detached: true }).unref()
+  await until(async (id) => (await window.zenith.games.running()).some((r) => r.gameId === id && r.tracking === 'process'), rg.id, 20000)
+  await until(async (id) => (await window.zenith.games.running()).every((r) => r.gameId !== id), rg.id, 40000)
+  const rgAfter = (await api(() => window.zenith.games.list())).find((g) => g.id === rg.id)
+  check(rgAfter.playtimeSec >= 3 && rgAfter.playtimeSec < 15, `store-client game tracked by its own process (${rgAfter.playtimeSec}s, client not counted)`)
+  await api((id) => window.zenith.games.remove(id), rg.id)
+} finally {
+  for (const k of keys) { try { execFileSync('reg', ['delete', UN + k, '/f'], { stdio: 'ignore' }) } catch {} }
+  await api(() => window.zenith.settings.set({ scanning: { detectEa: false, detectBattlenet: false, detectRiot: false } }))
+}
 await api((id) => window.zenith.games.remove(id), dbd.id)
 // Newer Steam games keep their tall cover under hashed paths.
 const pbz = await api((exe) => window.zenith.games.add({ title: 'Phantom Blade Zero', exePath: exe }), pq.exePath)

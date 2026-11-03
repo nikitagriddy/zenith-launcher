@@ -208,6 +208,27 @@ export async function fetchArtwork(gameId: string, force = false): Promise<boole
     if (!game.developer && epic.developer) patch.developer = epic.developer
   }
 
+  if (game.source === 'gog' && game.sourceId && need()) {
+    interface GogGame {
+      description?: string
+      _links?: { boxArtImage?: { href: string }; backgroundImage?: { href: string } }
+      _embedded?: { developers?: { name: string }[] }
+    }
+    const g = await fetchJson<GogGame>(`https://api.gog.com/v2/games/${encodeURIComponent(game.sourceId)}?locale=en-US`)
+    if (g) {
+      if (!game.cover && g._links?.boxArtImage?.href) {
+        const c = await fetchImage(g._links.boxArtImage.href)
+        if (c) patch.cover = saveMediaBuffer(c.buf, c.ext, 'cover')
+      }
+      if (!game.hero && g._links?.backgroundImage?.href) {
+        const h = await fetchImage(g._links.backgroundImage.href)
+        if (h) patch.hero = saveMediaBuffer(h.buf, h.ext, 'hero')
+      }
+      if (!game.description && g.description) patch.description = decode(g.description).slice(0, 1200)
+      if (!game.developer && g._embedded?.developers?.length) patch.developer = g._embedded.developers.map((d) => d.name).join(', ')
+    }
+  }
+
   if (need() || (!game.description && !patch.description)) {
     const appid = game.source === 'steam' && game.sourceId ? game.sourceId : await findSteamAppId(game.title)
     if (appid) {

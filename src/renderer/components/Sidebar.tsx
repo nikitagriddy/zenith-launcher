@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { ChartNoAxesColumn, Compass, LibraryBig, PanelLeftClose, PanelLeftOpen, Plus, ScanSearch, Settings2 } from 'lucide-react'
+import { BadgePercent, ChartNoAxesColumn, Compass, LibraryBig, PanelLeftClose, PanelLeftOpen, Plus, ScanSearch, Settings2 } from 'lucide-react'
 import { useStore, type Route } from '../lib/store'
 import { cx } from '../lib/format'
 import { GameIcon } from './GameArt'
@@ -7,7 +7,8 @@ import { GameIcon } from './GameArt'
 const NAV: { page: Route['page']; label: string; icon: typeof Compass; hint: string }[] = [
   { page: 'home', label: 'Overview', icon: Compass, hint: 'Ctrl+1' },
   { page: 'library', label: 'Library', icon: LibraryBig, hint: 'Ctrl+2' },
-  { page: 'stats', label: 'Statistics', icon: ChartNoAxesColumn, hint: 'Ctrl+3' },
+  { page: 'deals', label: 'Discount Games', icon: BadgePercent, hint: 'Ctrl+3' },
+  { page: 'stats', label: 'Statistics', icon: ChartNoAxesColumn, hint: 'Ctrl+4' },
   { page: 'settings', label: 'Settings', icon: Settings2, hint: 'Ctrl+,' }
 ]
 
@@ -17,6 +18,7 @@ export function Sidebar() {
   const categories = useStore((s) => s.categories)
   const running = useStore((s) => s.running)
   const a = useStore((s) => s.settings.appearance)
+  const dealsUnseen = useStore((s) => s.dealsUnseen)
   const { navigate, openEditor, setScanOpen, updateSettings } = useStore.getState()
   const collapsed = a.sidebarCollapsed
 
@@ -63,6 +65,17 @@ export function Sidebar() {
               <n.icon className={cx('h-[18px] w-[18px] shrink-0', active && 'text-accent')} />
               {!collapsed && <span className="flex-1 text-left">{n.label}</span>}
               {!collapsed && n.page === 'library' && <span className="num text-[11px] text-muted">{games.filter((g) => !g.hidden).length}</span>}
+              {n.page === 'deals' && dealsUnseen > 0 && (
+                <span
+                  className={cx(
+                    'num flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-on-accent',
+                    collapsed && 'absolute right-2 top-1'
+                  )}
+                  title={`${dealsUnseen} new free game${dealsUnseen === 1 ? '' : 's'}`}
+                >
+                  {dealsUnseen}
+                </span>
+              )}
             </button>
           )
         })}

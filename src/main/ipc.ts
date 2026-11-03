@@ -9,6 +9,8 @@ import { deleteMedia, extractExeIcon, getMediaDir, importMediaFile, listMediaFil
 import { addGameWithDefaults, importCandidates, removeGameAndMedia, runScan } from './library'
 import type { GameLauncher } from './launcher'
 import { fetchAllArtwork, fetchArtwork } from './artwork'
+import { getExtras, getInstallSize, getUninstallInfo, runUninstall } from './extras'
+import { getFreeGames } from './deals'
 import { checkForUpdates, downloadUpdate, getUpdateStatus, installUpdate, postponeInstall } from './updater'
 import { log } from './log'
 
@@ -250,6 +252,19 @@ export function registerIpc(ctx: IpcContext): void {
 
   // ---- stats ----
   handle('stats:get', () => repo.getStats())
+
+  // ---- game page extras ----
+  handle('extras:get', (id: unknown) => getExtras(str(id, 'id')))
+  handle('extras:size', (id: unknown, refresh?: unknown) => getInstallSize(str(id, 'id'), refresh === true))
+  handle('extras:uninstallInfo', (id: unknown) => getUninstallInfo(str(id, 'id')))
+  handle('extras:uninstall', (id: unknown) => {
+    const gid = str(id, 'id')
+    if (ctx.launcher.isRunning(gid)) throw new Error('Close the game before uninstalling it.')
+    return runUninstall(gid)
+  })
+
+  // ---- free games ----
+  handle('deals:list', (force?: unknown) => getFreeGames(force === true))
 
   // ---- artwork ----
   handle('art:fetch', async (id: unknown) => {

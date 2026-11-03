@@ -4,6 +4,7 @@ import { execFile } from 'node:child_process'
 import type { ScanCandidate, ScanProgress, ScanResult, Settings } from '@shared/types'
 import { prettifyTitle, rankExes, walkExes } from './exe'
 import { log } from './log'
+import { scanStores } from './stores'
 
 /** Sub-folder names that mean "you picked a game folder itself, not a folder of games". */
 const GENERIC_SUBDIRS = new Set(['bin', 'bin64', 'binaries', 'x64', 'x86', 'win64', 'win32', 'game', 'engine', 'data', 'content', 'redist', 'plugins'])
@@ -269,13 +270,20 @@ export async function scanForGames(
   if (opts.includeStores !== false) {
     if (settings.scanning.detectSteam) await scanSteam(ctx, out, warnings)
     if (settings.scanning.detectEpic) await scanEpic(ctx, out)
+    const stores = await scanStores(
+      settings.scanning,
+      (source, id) => ctx.knownSource.has(`${source}:${id}`),
+      (store) => onProgress({ phase: 'stores', current: store, found: out.length })
+    )
+    for (const c of stores) if (!ctx.knownDirs.has(lc(c.installDir)) && !(c.exePath && ctx.knownExe.has(lc(c.exePath)))) out.push(c)
   }
-  // De-duplicate (store entries win over raw folder hits for the same install dir).
+  // De-duplicate: the same install folder can show up from several sources; keep the most specific one.
+  const rank = (s: string) => ['steam', 'epic', 'gog', 'ubisoft', 'battlenet', 'riot', 'ea', 'scan'].indexOf(s)
   const byDir = new Map<string, ScanCandidate>()
   for (const c of out) {
     const k = lc(c.installDir)
     const prev = byDir.get(k)
-    if (!prev || (prev.source === 'scan' && c.source !== 'scan')) byDir.set(k, c)
+    if (!prev || rank(c.source) < rank(prev.source)) byDir.set(k, c)
   }
   onProgress({ phase: 'done', current: '', found: byDir.size })
   return { candidates: [...byDir.values()], scannedFolders: scanned, warnings }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { FolderPlus, Loader2, Radar, X } from 'lucide-react'
-import type { ScanCandidate, ScanProgress } from '@shared/types'
+import { SOURCE_LABELS, type ScanCandidate, type ScanProgress } from '@shared/types'
 import { api } from '../lib/api'
 import { useStore } from '../lib/store'
 import { cx, formatBytes } from '../lib/format'
@@ -9,7 +9,17 @@ import { Checkbox, Toggle } from './controls'
 
 type Phase = 'setup' | 'scanning' | 'results'
 
-const SOURCE_LABEL: Record<string, string> = { scan: 'Folder', steam: 'Steam', epic: 'Epic' }
+const SOURCE_LABEL: Record<string, string> = SOURCE_LABELS
+
+const STORES = [
+  ['detectSteam', 'Steam', 'Library manifests + local artwork'],
+  ['detectEpic', 'Epic Games', 'Epic Games Launcher installs'],
+  ['detectGog', 'GOG Galaxy', 'GOG games from the registry'],
+  ['detectEa', 'EA app', 'EA / Origin titles'],
+  ['detectUbisoft', 'Ubisoft Connect', 'Launches through Ubisoft Connect'],
+  ['detectBattlenet', 'Battle.net', 'Blizzard & Activision games'],
+  ['detectRiot', 'Riot Games', 'VALORANT, League of Legends…']
+] as const
 
 export function ScanModal() {
   const open = useStore((s) => s.scanOpen)
@@ -72,7 +82,7 @@ export function ScanModal() {
 
   const update = (key: string, patch: Partial<ScanCandidate>) => setResults((rs) => rs.map((c) => (c.key === key ? { ...c, ...patch } : c)))
   const allOn = results.length > 0 && selected.size === results.length
-  const nothingToScan = !folders.length && !settings.scanning.detectSteam && !settings.scanning.detectEpic
+  const nothingToScan = !folders.length && !STORES.some(([key]) => settings.scanning[key])
   const counts = useMemo(() => {
     const m: Record<string, number> = {}
     for (const c of results) m[c.source] = (m[c.source] ?? 0) + 1
@@ -85,7 +95,7 @@ export function ScanModal() {
       onClose={() => phase !== 'scanning' && setScanOpen(false)}
       width="max-w-3xl"
       title="Scan for games"
-      subtitle="Zenith looks for game executables in your folders and reads installed Steam and Epic Games libraries."
+      subtitle="Zenith looks for game executables in your folders and finds games installed through Steam, Epic, GOG, EA, Ubisoft, Battle.net and Riot."
       footer={
         phase === 'results' ? (
           <>
@@ -141,21 +151,19 @@ export function ScanModal() {
               </div>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            {(
-              [
-                ['detectSteam', 'Steam library', 'Reads installed Steam games and their local artwork.'],
-                ['detectEpic', 'Epic Games', 'Reads installed Epic Games Launcher titles.']
-              ] as const
-            ).map(([key, title, text]) => (
-              <div key={key} className="flex items-start justify-between gap-3 rounded-xl border border-line/[0.08] bg-bg/40 p-4">
-                <div>
-                  <div className="text-sm font-medium">{title}</div>
-                  <div className="mt-0.5 text-xs text-muted">{text}</div>
+          <div>
+            <span className="label">Game stores</span>
+            <div className="grid grid-cols-2 gap-2">
+              {STORES.map(([key, title, text]) => (
+                <div key={key} className="flex items-center justify-between gap-3 rounded-xl border border-line/[0.08] bg-bg/40 px-4 py-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium">{title}</div>
+                    <div className="truncate text-[11px] text-muted">{text}</div>
+                  </div>
+                  <Toggle checked={settings.scanning[key]} onChange={(v) => void updateSettings({ scanning: { [key]: v } })} />
                 </div>
-                <Toggle checked={settings.scanning[key]} onChange={(v) => void updateSettings({ scanning: { [key]: v } })} />
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
           <p className="readout">Search depth: {settings.scanning.depth} levels · change in Settings › Scanning</p>
         </div>
@@ -169,7 +177,13 @@ export function ScanModal() {
             <Radar className="h-8 w-8 animate-pulse text-accent" />
           </div>
           <div className="readout !text-accent">
-            {progress?.phase === 'steam' ? 'Reading Steam' : progress?.phase === 'epic' ? 'Reading Epic Games' : 'Scanning folders'}
+            {progress?.phase === 'steam'
+              ? 'Reading Steam'
+              : progress?.phase === 'epic'
+                ? 'Reading Epic Games'
+                : progress?.phase === 'stores'
+                  ? `Reading ${progress.current}`
+                  : 'Scanning folders'}
           </div>
           <div className="mt-2 max-w-full truncate px-10 font-mono text-xs text-muted">{progress?.current || '…'}</div>
           <div className="num mt-4 text-3xl font-semibold">{progress?.found ?? 0}</div>

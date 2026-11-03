@@ -70,6 +70,15 @@ const api: ZenithApi = {
   stats: {
     get: () => invoke('stats:get')
   },
+  extras: {
+    get: (id) => invoke('extras:get', id),
+    size: (id, refresh) => invoke('extras:size', id, refresh),
+    uninstallInfo: (id) => invoke('extras:uninstallInfo', id),
+    uninstall: (id) => invoke('extras:uninstall', id)
+  },
+  deals: {
+    list: (force) => invoke('deals:list', force)
+  },
   art: {
     fetch: (id) => invoke('art:fetch', id),
     fetchAll: () => invoke('art:fetchAll')
