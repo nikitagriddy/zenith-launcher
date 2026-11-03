@@ -60,6 +60,8 @@ export function initUpdater(h: UpdaterHooks, settings: Settings['updates']): voi
     return
   }
   autoUpdater.autoInstallOnAppQuit = true
+  // Always ask GitHub fresh; a cached release feed can hide a just-published version.
+  autoUpdater.requestHeaders = { 'Cache-Control': 'no-cache', Pragma: 'no-cache' }
   autoUpdater.logger = {
     info: (m: unknown) => log.info('[updater]', m),
     warn: (m: unknown) => log.warn('[updater]', m),
