@@ -103,6 +103,39 @@ interface SteamDetails {
   [id: string]: { success: boolean; data?: { short_description?: string; developers?: string[]; header_image?: string } }
 }
 
+interface SteamItems {
+  response?: {
+    store_items?: {
+      assets?: {
+        asset_url_format?: string
+        library_capsule?: string
+        library_capsule_2x?: string
+        library_hero?: string
+        library_hero_2x?: string
+        header?: string
+      }
+    }[]
+  }
+}
+
+/**
+ * Exact artwork URLs from the Steam store. Newer games keep their art under hashed paths
+ * (…/apps/{id}/{hash}/library_capsule.jpg), so the classic fixed URLs 404 for them.
+ */
+async function steamAssets(id: string): Promise<{ cover: string[]; hero: string[] }> {
+  const input = encodeURIComponent(
+    JSON.stringify({ ids: [{ appid: Number(id) }], context: { language: 'english', country_code: 'US' }, data_request: { include_assets: true } })
+  )
+  const r = await fetchJson<SteamItems>(`https://api.steampowered.com/IStoreBrowseService/GetItems/v1/?input_json=${input}`)
+  const a = r?.response?.store_items?.[0]?.assets
+  if (!a?.asset_url_format) return { cover: [], hero: [] }
+  const url = (file?: string) => (file ? `https://shared.steamstatic.com/store_item_assets/${a.asset_url_format!.replace('${FILENAME}', file)}` : '')
+  return {
+    cover: [url(a.library_capsule_2x), url(a.library_capsule)].filter(Boolean),
+    hero: [url(a.library_hero), url(a.library_hero_2x)].filter(Boolean)
+  }
+}
+
 function steamUrls(id: string, file: string): string[] {
   return [
     `https://shared.steamstatic.com/store_item_assets/steam/apps/${id}/${file}`,
@@ -152,7 +185,8 @@ function findEpicItem(game: Game): EpicItem | null {
 export async function fetchArtwork(gameId: string, force = false): Promise<boolean> {
   const game = getGame(gameId)
   if (!game) return false
-  const metaKey = `art_checked:${game.id}`
+  // v2: recheck everything once, now that hashed Steam cover paths are supported.
+  const metaKey = `art_checked_v2:${game.id}`
   if (!force && Date.now() - Number(getMeta(metaKey) ?? 0) < RECHECK_MS) return false
   if (game.cover && game.hero && game.description) return false
 
@@ -179,12 +213,13 @@ export async function fetchArtwork(gameId: string, force = false): Promise<boole
     if (appid) {
       const details = await fetchJson<SteamDetails>(`https://store.steampowered.com/api/appdetails?appids=${appid}&l=english`)
       const data = details?.[appid]?.success ? details[appid]!.data : undefined
+      const assets = need() ? await steamAssets(appid) : { cover: [], hero: [] }
       if (!game.cover && !patch.cover) {
-        const c = await firstImage([...steamUrls(appid, 'library_600x900_2x.jpg'), ...steamUrls(appid, 'library_600x900.jpg')])
+        const c = await firstImage([...assets.cover, ...steamUrls(appid, 'library_600x900_2x.jpg'), ...steamUrls(appid, 'library_600x900.jpg')])
         if (c) patch.cover = saveMediaBuffer(c.buf, c.ext, 'cover')
       }
       if (!game.hero && !patch.hero) {
-        const h = await firstImage([...steamUrls(appid, 'library_hero.jpg'), ...(data?.header_image ? [data.header_image] : [])])
+        const h = await firstImage([...assets.hero, ...steamUrls(appid, 'library_hero.jpg'), ...(data?.header_image ? [data.header_image] : [])])
         if (h) patch.hero = saveMediaBuffer(h.buf, h.ext, 'hero')
       }
       if (!game.description && !patch.description && data?.short_description) patch.description = decode(data.short_description)

@@ -109,6 +109,18 @@ const gotArt = await api((id) => window.zenith.art.fetch(id), dbd.id)
 const dbdAfter = await api((id) => window.zenith.games.list().then((l) => l.find((g) => g.id === id)), dbd.id)
 check(gotArt && !!dbdAfter.cover && !!dbdAfter.hero && !!dbdAfter.description, `real cover, banner and description downloaded (${dbdAfter.developer || 'no dev'})`)
 await api((id) => window.zenith.games.remove(id), dbd.id)
+// Newer Steam games keep their tall cover under hashed paths.
+const pbz = await api((exe) => window.zenith.games.add({ title: 'Phantom Blade Zero', exePath: exe }), pq.exePath)
+await api((id) => window.zenith.art.fetch(id), pbz.id)
+const pbzArt = await api((id) => window.zenith.games.list().then((l) => l.find((g) => g.id === id)), pbz.id)
+const ratio = await page.evaluate(async (name) => {
+  const img = new Image()
+  img.src = `zenith-media://media/${encodeURIComponent(name)}`
+  await img.decode()
+  return img.naturalHeight / img.naturalWidth
+}, pbzArt.cover || 'missing.png').catch(() => 0)
+check(!!pbzArt.cover && ratio > 1.3, `tall cover found for a new Steam game (h/w ${ratio.toFixed(2)})`)
+await api((id) => window.zenith.games.remove(id), pbz.id)
 
 // Favorites, collections, settings.
 await api((id) => window.zenith.games.toggleFavorite(id), pq.id)
