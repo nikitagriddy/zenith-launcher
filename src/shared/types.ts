@@ -60,6 +60,10 @@ export interface LaunchPlan {
   priority: 'normal' | 'high'
   gpu: boolean
   powerPlan: boolean
+  /** NVIDIA texture LOD bias for the session (driver units, 1/8 mip), or null. */
+  driverLodBias: number | null
+  /** Executable name the NVIDIA driver profile is matched on. */
+  driverExe: string
   engine: GameEngine
   applies: string[]
   limits: string[]
@@ -265,6 +269,8 @@ export interface Settings {
     defaultProfile: LaunchProfileId
     potatoResolution: 'native' | '1600x900' | '1280x720' | '960x540'
     potatoRenderScale: number
+    /** NVIDIA cards only: flatten textures through the driver in Potato mode. */
+    nvidiaTextures: 'off' | 'smooth' | 'clay' | 'extreme'
     boostPriority: boolean
     boostGpu: boolean
     boostPowerPlan: boolean

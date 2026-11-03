@@ -1,5 +1,13 @@
 // Launch modes: what Zenith changes for one play session (launch options, CPU priority, GPU, power plan).
+import path from 'node:path'
 import { SOURCE_LABELS, type Game, type GameEngine, type LaunchPlan, type LaunchProfileId, type Settings } from '@shared/types'
+
+const CLAY: Record<Settings['launch']['nvidiaTextures'], { value: number; name: string }> = {
+  off: { value: 0, name: '' },
+  smooth: { value: 10, name: 'smooth' },
+  clay: { value: 20, name: 'clay' },
+  extreme: { value: 69, name: 'extreme clay' }
+}
 
 export const PROFILES: LaunchProfileId[] = ['default', 'boost', 'potato', 'custom']
 
@@ -53,9 +61,10 @@ function potatoTokens(engine: GameEngine, s: Settings['launch']): { tokens: stri
   }
 }
 
-export function buildPlan(game: Game, profile: LaunchProfileId, settings: Settings, engine: GameEngine): LaunchPlan {
+/** `nvidia`: true / false when known, null while the first driver check is still running. */
+export function buildPlan(game: Game, profile: LaunchProfileId, settings: Settings, engine: GameEngine, nvidia: boolean | null = null): LaunchPlan {
   const s = settings.launch
-  const plan: LaunchPlan = { profile, tokens: [], priority: 'normal', gpu: false, powerPlan: false, engine, applies: [], limits: [], summary: '' }
+  const plan: LaunchPlan = { profile, tokens: [], priority: 'normal', gpu: false, powerPlan: false, driverLodBias: null, driverExe: '', engine, applies: [], limits: [], summary: '' }
   const argsBlocked = NO_ARGS_SOURCES.has(game.source)
   const boost = () => {
     if (s.boostPriority) {
@@ -95,10 +104,21 @@ export function buildPlan(game: Game, profile: LaunchProfileId, settings: Settin
   } else {
     // Potato: the engine's lowest settings plus everything in Boost.
     const p = potatoTokens(engine, s)
+    // Clay textures work through the NVIDIA driver, so they also cover games that can't take launch options.
+    const clay = CLAY[s.nvidiaTextures]
+    const exe = path.basename(engine.realExe || game.exePath)
+    if (clay.value && nvidia && exe) {
+      plan.driverLodBias = clay.value
+      plan.driverExe = exe
+      plan.applies.push(`NVIDIA driver: ${clay.name} textures for this game, removed when it closes`)
+    } else if (clay.value && nvidia === false) {
+      plan.limits.push('Clay textures need an NVIDIA graphics card.')
+    }
+    const driverNote = plan.driverLodBias ? 'only textures are lowered, through the NVIDIA driver' : 'in-game graphics stay as they are'
     if (argsBlocked && p.tokens.length) {
-      plan.limits.push(`${SOURCE_LABELS[game.source]} doesn't accept launch options, so in-game graphics stay as they are.`)
+      plan.limits.push(`${SOURCE_LABELS[game.source]} doesn't accept launch options, so ${driverNote}.`)
     } else if (engine.id === 'unknown') {
-      plan.limits.push('Engine not recognized, so in-game graphics stay as they are.')
+      plan.limits.push(`Engine not recognized, so ${driverNote}.`)
     } else {
       plan.tokens.push(...p.tokens)
       plan.applies.push(...p.applies.map((a, i) => (i === 0 ? `${engine.label}: ${a.charAt(0).toLowerCase()}${a.slice(1)}` : a)))
@@ -110,11 +130,14 @@ export function buildPlan(game: Game, profile: LaunchProfileId, settings: Settin
     plan.limits.push(`${SOURCE_LABELS[game.source]} doesn't accept launch options.`)
   }
   const graphics = plan.tokens.length > 0
+  const textures = plan.driverLodBias !== null
   plan.summary =
     profile === 'potato'
       ? graphics
-        ? `Lowest graphics${resolution(s) ? `, ${s.potatoResolution.replace('x', '×')}` : ''}, plus Boost`
-        : 'Boost only for this game'
+        ? `Lowest graphics${resolution(s) ? `, ${s.potatoResolution.replace('x', '×')}` : ''}${textures ? ', clay textures' : ''}, plus Boost`
+        : textures
+          ? 'Clay textures through the NVIDIA driver, plus Boost'
+          : 'Boost only for this game'
       : graphics
         ? `Your launch options${s.customBoost && plan.applies.length > 1 ? ', plus Boost' : ''}`
         : s.customArgs.trim()

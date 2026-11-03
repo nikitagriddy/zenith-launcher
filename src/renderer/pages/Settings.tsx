@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import {
+  AlertTriangle,
   Archive,
   Database,
   Download,
@@ -384,7 +385,7 @@ const ENGINE_ROWS: [string, string][] = [
   ['Unity', 'Lowest quality level (when the game uses Unity’s standard names) and resolution.'],
   ['Source and Source 2', 'Resolution.'],
   ['Godot', 'Resolution.'],
-  ['Anything else', 'Graphics stay as they are; Boost still applies.']
+  ['Anything else', 'Engine graphics stay as they are. On NVIDIA cards, clay textures and Boost still apply.']
 ]
 
 function LaunchTab() {
@@ -447,6 +448,34 @@ function LaunchTab() {
             <Slider value={l.potatoRenderScale} min={25} max={100} step={5} onChange={(v) => set({ potatoRenderScale: v })} format={(v) => `${v}%`} />
           </div>
         </SettingRow>
+        <SettingRow
+          title="Clay textures (NVIDIA)"
+          description="Flattens surface detail through your NVIDIA driver, for this game only. Works for Epic games like Fortnite too."
+        >
+          <Select
+            className="h-9 w-48"
+            value={l.nvidiaTextures}
+            onChange={(v) => set({ nvidiaTextures: v })}
+            options={[
+              { value: 'off', label: 'Off' },
+              { value: 'smooth', label: 'Smooth (+1.25)' },
+              { value: 'clay', label: 'Clay (+2.5)' },
+              { value: 'extreme', label: 'Extreme clay (+8.6)' }
+            ]}
+          />
+        </SettingRow>
+        {l.nvidiaTextures === 'extreme' && (
+          <p className="mb-2 flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-300">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            Extreme clay can make floors and some surfaces disappear in games like Fortnite. Clay keeps them visible.
+          </p>
+        )}
+        <div className="mb-3 rounded-xl border border-line/[0.08] bg-bg/40 p-4 text-xs leading-relaxed text-muted">
+          <div className="mb-1 text-sm font-semibold text-fg">Is this safe for online games?</div>
+          Zenith only uses launch options and your graphics driver’s own per-game settings, the same thing NVIDIA Control Panel changes. It never edits,
+          deletes or injects into game files, and never touches the game while it runs. Driver texture changes are switched on right before the game
+          starts and removed when it closes. That’s the lowest-risk way to do this, but no tool can promise a game will never change its rules.
+        </div>
         <dl className="mt-3 divide-y divide-line/[0.06] rounded-xl border border-line/[0.08]">
           {ENGINE_ROWS.map(([engine, what]) => (
             <div key={engine} className="grid grid-cols-[150px_1fr] gap-4 px-4 py-2.5">
@@ -456,7 +485,7 @@ function LaunchTab() {
           ))}
         </dl>
         <p className="mt-3 text-xs leading-relaxed text-muted">
-          Steam games get the options through Steam. Epic, Ubisoft, Riot and Battle.net games can't take launch options, so they get Boost only. Some online games ignore launch options.
+          Steam games get the options through Steam. Epic, Ubisoft, Riot and Battle.net games can't take launch options, so they get clay textures (NVIDIA) and Boost. Some online games ignore launch options.
         </p>
       </Card>
 

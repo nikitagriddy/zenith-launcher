@@ -7,6 +7,7 @@ import type { Game, LaunchPlan, LaunchProfileId, RunningInfo } from '@shared/typ
 import { SYSTEM_PROCESS_NAMES, isDriveRoot, walkExes } from './exe'
 import { log } from './log'
 import { preferHighPerformanceGpu, raisePriority, useHighPerformancePlan } from './sysboost'
+import { applyClayTextures } from './nvidia'
 
 interface RunState {
   gameId: string
@@ -166,45 +167,59 @@ export class GameLauncher extends EventEmitter<LauncherEvents> {
 
     // The user's own options are passed exactly as typed; the launch mode's options go after them.
     const argLine = [game.launchArgs.trim(), ...(viaClient ? [] : plan.tokens)].filter(Boolean).join(' ')
-    this.applyBeforeStart(state, game, plan)
+    await this.applyBeforeStart(state, game, plan)
+    try {
 
-    const steamExe = useUri && game.source === 'steam' && game.sourceId && argLine ? findSteamExe() : null
-    if (steamExe) {
-      // steam://rungameid can't carry launch options; "steam.exe -applaunch <id> <options>" can.
-      await this.spawnDirect(state, steamExe, `-applaunch ${game.sourceId} ${argLine}`, path.dirname(steamExe), false, false)
-      this.beginWaiting(state, 180_000)
-    } else if (useUri) {
-      await shell.openExternal(game.launchUri)
-      this.beginWaiting(state, 180_000)
-    } else {
-      const cwd = game.workingDir && fs.existsSync(game.workingDir) ? game.workingDir : path.dirname(game.exePath)
-      const ext = path.extname(game.exePath).toLowerCase()
-      if (game.runAsAdmin) {
-        this.spawnElevated(state, game.exePath, argLine, cwd)
-      } else if (viaClient) {
-        await this.spawnDirect(state, game.exePath, argLine, cwd, false, false)
+      const steamExe = useUri && game.source === 'steam' && game.sourceId && argLine ? findSteamExe() : null
+      if (steamExe) {
+        // steam://rungameid can't carry launch options; "steam.exe -applaunch <id> <options>" can.
+        await this.spawnDirect(state, steamExe, `-applaunch ${game.sourceId} ${argLine}`, path.dirname(steamExe), false, false)
         this.beginWaiting(state, 180_000)
-      } else if (ext === '.exe') {
-        try {
-          await this.spawnDirect(state, game.exePath, argLine, cwd)
-        } catch (err) {
-          const code = (err as NodeJS.ErrnoException).code
-          // ERROR_ELEVATION_REQUIRED surfaces as EACCES / UNKNOWN: retry through UAC.
-          if (code === 'EACCES' || code === 'UNKNOWN' || code === 'EPERM') {
-            log.info('Elevation required, retrying as administrator:', game.exePath)
-            this.spawnElevated(state, game.exePath, argLine, cwd)
-          } else {
-            throw new Error(`Could not start ${game.title}: ${(err as Error).message}`)
-          }
-        }
-      } else if (ext === '.bat' || ext === '.cmd') {
-        await this.spawnDirect(state, `"${game.exePath}"`, argLine, cwd, true)
+      } else if (useUri) {
+        await shell.openExternal(game.launchUri)
+        this.beginWaiting(state, 180_000)
       } else {
-        // .lnk, .url and anything else: let Windows decide how to open it.
-        const err = await shell.openPath(game.exePath)
-        if (err) throw new Error(`Could not open ${game.exePath}: ${err}`)
-        this.beginWaiting(state, 120_000)
+        const cwd = game.workingDir && fs.existsSync(game.workingDir) ? game.workingDir : path.dirname(game.exePath)
+        const ext = path.extname(game.exePath).toLowerCase()
+        if (game.runAsAdmin) {
+          this.spawnElevated(state, game.exePath, argLine, cwd)
+        } else if (viaClient) {
+          await this.spawnDirect(state, game.exePath, argLine, cwd, false, false)
+          this.beginWaiting(state, 180_000)
+        } else if (ext === '.exe') {
+          try {
+            await this.spawnDirect(state, game.exePath, argLine, cwd)
+          } catch (err) {
+            const code = (err as NodeJS.ErrnoException).code
+            // ERROR_ELEVATION_REQUIRED surfaces as EACCES / UNKNOWN: retry through UAC.
+            if (code === 'EACCES' || code === 'UNKNOWN' || code === 'EPERM') {
+              log.info('Elevation required, retrying as administrator:', game.exePath)
+              this.spawnElevated(state, game.exePath, argLine, cwd)
+            } else {
+              throw new Error(`Could not start ${game.title}: ${(err as Error).message}`)
+            }
+          }
+        } else if (ext === '.bat' || ext === '.cmd') {
+          await this.spawnDirect(state, `"${game.exePath}"`, argLine, cwd, true)
+        } else {
+          // .lnk, .url and anything else: let Windows decide how to open it.
+          const err = await shell.openPath(game.exePath)
+          if (err) throw new Error(`Could not open ${game.exePath}: ${err}`)
+          this.beginWaiting(state, 120_000)
+        }
       }
+
+    } catch (err) {
+      // The game never started: put back anything the launch mode changed.
+      for (const undo of state.undo.reverse()) {
+        try {
+          undo()
+        } catch {
+          /* best effort */
+        }
+      }
+      state.undo = []
+      throw err
     }
 
     this.running.set(game.id, state)
@@ -342,8 +357,8 @@ export class GameLauncher extends EventEmitter<LauncherEvents> {
     this.finish(state, true)
   }
 
-  /** GPU preference and power plan must be in place before the game starts. */
-  private applyBeforeStart(state: RunState, game: Game, plan: LaunchPlan): void {
+  /** GPU preference, power plan and driver textures must be in place before the game starts. */
+  private async applyBeforeStart(state: RunState, game: Game, plan: LaunchPlan): Promise<void> {
     if (plan.gpu) {
       const exes = [game.exePath, plan.engine.realExe ?? ''].filter((p) => p && /\.exe$/i.test(p) && !CLIENT_EXES.has(path.basename(p).toLowerCase()))
       if (exes.length) state.undo.push(preferHighPerformanceGpu(exes))
@@ -351,6 +366,13 @@ export class GameLauncher extends EventEmitter<LauncherEvents> {
     if (plan.powerPlan) {
       const release = useHighPerformancePlan()
       if (release) state.undo.push(release)
+    }
+    if (plan.driverLodBias !== null && plan.driverExe) {
+      try {
+        state.undo.push(await applyClayTextures(plan.driverExe, plan.driverLodBias))
+      } catch (err) {
+        this.emit('error', { gameId: game.id, title: game.title, message: `Clay textures couldn't be turned on: ${(err as Error).message}. The game starts normally.` })
+      }
     }
   }
 

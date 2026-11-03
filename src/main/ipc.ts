@@ -21,7 +21,7 @@ export interface IpcContext {
   launcher: GameLauncher
   send: (event: string, payload?: unknown) => void
   launchGame: (id: string, profile?: LaunchProfileId) => Promise<void>
-  planFor: (id: string, profile: LaunchProfileId) => LaunchPlan
+  planFor: (id: string, profile: LaunchProfileId) => Promise<LaunchPlan>
   createShortcut: (id: string, where: 'desktop' | 'startMenu') => string
   onSettingsChanged: (prev: Settings, next: Settings) => void
   /** Fetch artwork in the background for games that are missing some (respects the auto-artwork setting). */
@@ -102,9 +102,9 @@ export function registerIpc(ctx: IpcContext): void {
   handle('games:launch', (id: unknown, profile?: unknown) =>
     ctx.launchGame(str(id, 'id'), PROFILES.includes(profile as LaunchProfileId) ? (profile as LaunchProfileId) : undefined)
   )
-  handle('games:launchPlans', (id: unknown) => {
+  handle('games:launchPlans', async (id: unknown) => {
     const gid = str(id, 'id')
-    return Object.fromEntries(PROFILES.map((p) => [p, ctx.planFor(gid, p)]))
+    return Object.fromEntries(await Promise.all(PROFILES.map(async (p) => [p, await ctx.planFor(gid, p)] as const)))
   })
   handle('games:running', () => ctx.launcher.list())
   handle('games:openFolder', async (id: unknown) => {

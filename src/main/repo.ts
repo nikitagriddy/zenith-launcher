@@ -326,6 +326,7 @@ export function saveSettings(patch: DeepPartial<Settings>): Settings {
   next.launch.potatoRenderScale = clamp(next.launch.potatoRenderScale, 25, 100)
   if (!['default', 'boost', 'potato', 'custom'].includes(next.launch.defaultProfile)) next.launch.defaultProfile = 'default'
   if (!['native', '1600x900', '1280x720', '960x540'].includes(next.launch.potatoResolution)) next.launch.potatoResolution = '1280x720'
+  if (!['off', 'smooth', 'clay', 'extreme'].includes(next.launch.nvidiaTextures)) next.launch.nvidiaTextures = 'clay'
   if (!['auto', 'quit', 'manual'].includes(next.updates.installMode)) next.updates.installMode = DEFAULT_SETTINGS.updates.installMode
   if (!/^#[0-9a-f]{6}$/i.test(next.appearance.accent)) next.appearance.accent = DEFAULT_SETTINGS.appearance.accent
   run("INSERT OR REPLACE INTO settings (key, value) VALUES ('app', ?)", [JSON.stringify(next)])

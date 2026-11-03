@@ -52,6 +52,17 @@ const priority = (name) => {
   }
 }
 
+const nvdrs = (...a) => {
+  try {
+    return execFileSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', resolve('resources', 'nvdrs.ps1'), ...a]).toString()
+  } catch (e) {
+    return String(e.stdout ?? e)
+  }
+}
+const lodBias = (exe) => /value\.0x00738E8F=custom:(\d+)/.exec(nvdrs('get', exe, '0x00738E8F'))?.[1] ?? null
+const hasProfile = (exe) => !nvdrs('get', exe, '0x00738E8F').includes('profile=none')
+const launchApp = () => _electron.launch({ executablePath: require('electron'), args: ['.'], env: { ...process.env, ZENITH_USER_DATA: join(root, 'user') } })
+
 const app = await _electron.launch({ executablePath: require('electron'), args: ['.'], env: { ...process.env, ZENITH_USER_DATA: join(root, 'user') } })
 const p = await app.firstWindow()
 await p.getByText('is empty.').waitFor({ timeout: 20000 })
@@ -94,6 +105,9 @@ const plainPlans = await api((id) => window.zenith.games.launchPlans(id), plain.
 check(plainPlans.potato.tokens.length === 0 && plainPlans.potato.limits.some((l) => /not recognized/.test(l)), 'Unknown engine: honest "graphics stay as they are"')
 const epicPlans = await api((id) => window.zenith.games.launchPlans(id), epic.id)
 check(epicPlans.potato.tokens.length === 0 && epicPlans.potato.limits.some((l) => /Epic Games doesn't accept/.test(l)), 'Epic game: says launch options can’t be passed')
+check(sfPlans.potato.driverLodBias === 20 && sfPlans.potato.driverExe === 'Starfall-Win64-Shipping.exe', 'Potato on NVIDIA: clay textures (+2.5) on the real game exe')
+check(epicPlans.potato.driverLodBias === 20 && epicPlans.potato.limits.some((l) => /only textures are lowered/.test(l)), 'Epic game still gets clay textures through the driver')
+check(sfPlans.boost.driverLodBias === null && sfPlans.default.driverLodBias === null, 'Boost and Default never touch the driver')
 await api(() => window.zenith.settings.set({ launch: { potatoResolution: 'native', potatoRenderScale: 70 } }))
 const sfNative = await api((id) => window.zenith.games.launchPlans(id), sf.id)
 check(sfNative.potato.tokens.join(' ').includes('sg.ResolutionQuality 70') && !sfNative.potato.tokens.some((t) => t.startsWith('-ResX')), 'Settings change the plan (native res, 70% scale)')
@@ -112,6 +126,8 @@ await until(async (id) => (await window.zenith.games.running()).some((r) => r.ga
 await p.waitForTimeout(700)
 const line = cmdline('Starfall.exe')
 await p.waitForTimeout(3100)
+const clayDuring = lodBias('Starfall-Win64-Shipping.exe')
+check(clayDuring === '20', `NVIDIA driver profile has clay textures while playing (LOD bias value ${clayDuring})`)
 check(priority('Starfall') === 'High', `Boosted game runs at High CPU priority (${priority('Starfall') || 'not found'})`)
 check(gpuPref(join(ue, 'Starfall.exe')) && gpuPref(join(ue, 'Starfall', 'Binaries', 'Win64', 'Starfall-Win64-Shipping.exe')), 'High-performance GPU set for the game and its real exe')
 await p.screenshot({ path: join(shots, 'running.png') })
@@ -122,6 +138,8 @@ check(line.includes('-ExecCmds="sg.ResolutionQuality 50,sg.ViewDistanceQuality 0
 check(!gpuPref(join(ue, 'Starfall.exe')) && !gpuPref(join(ue, 'Starfall', 'Binaries', 'Win64', 'Starfall-Win64-Shipping.exe')), 'GPU preference removed after the game closed')
 const saved = (await api(() => window.zenith.games.list())).find((g) => g.id === sf.id)
 check(saved.launchProfile === 'potato', '"Always launch this way" saved Potato for the game')
+await new Promise((r) => setTimeout(r, 4000))
+check(!hasProfile('Starfall-Win64-Shipping.exe'), 'driver profile Zenith made is removed after the game closed')
 await p.waitForTimeout(500)
 await p.screenshot({ path: join(shots, 'play-button.png') })
 
@@ -138,6 +156,29 @@ await p.getByRole('button', { name: 'Settings' }).first().click()
 await p.getByRole('button', { name: 'Launch modes' }).click()
 await p.waitForTimeout(600)
 await p.screenshot({ path: join(shots, 'settings.png'), fullPage: false })
-await app.close()
+// ---- crash recovery: kill Zenith mid-game, restart, the driver tweak is cleaned up ----
+await api((id) => window.zenith.games.launch(id, 'potato'), pd.id)
+await until(async (id) => (await window.zenith.games.running()).some((r) => r.gameId === id), pd.id)
+await new Promise((r) => setTimeout(r, 1000))
+check(lodBias('PixelDrift.exe') === '20', 'clay textures on for the Unity game')
+execFileSync('taskkill', ['/PID', String(app.process().pid), '/T', '/F'], { stdio: 'ignore' })
+// Let the killed instance's helper processes exit so the single-instance lock is free.
+for (let i = 0; i < 20; i++) {
+  await new Promise((r) => setTimeout(r, 500))
+  try {
+    execFileSync('powershell', ['-NoProfile', '-Command', `if (Get-CimInstance Win32_Process -Filter "Name='electron.exe'" | Where-Object { $_.CommandLine -like '*e2e-modes*' }) { exit 1 }`])
+    break
+  } catch {}
+}
+check(lodBias('PixelDrift.exe') === '20', 'after a crash the setting is still there (expected)')
+const app2 = await launchApp()
+await (await app2.firstWindow()).waitForFunction(() => !!window.zenith)
+let cleaned = false
+for (let i = 0; i < 40 && !cleaned; i++) {
+  await new Promise((r) => setTimeout(r, 500))
+  cleaned = !hasProfile('PixelDrift.exe')
+}
+check(cleaned, 'next start removes the leftover driver setting')
+await app2.close()
 console.log(bad ? `\n${bad} check(s) failed` : '\nAll launch-mode checks passed')
 process.exit(bad ? 1 : 0)

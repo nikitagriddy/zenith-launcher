@@ -17,6 +17,7 @@ import { pathToFileURL } from 'node:url'
 import type { Game, LaunchPlan, LaunchProfileId, Settings, ToastPayload } from '@shared/types'
 import { buildPlan, resolveProfile } from './profiles'
 import { detectEngine } from './engine'
+import { hasNvidiaDriver, nvidiaShuttingDown, recoverClayTextures } from './nvidia'
 import { closeDatabase, flushNow, openDatabase } from './db'
 import { initLog, log } from './log'
 import { initMedia, mediaPath } from './media'
@@ -240,14 +241,14 @@ function createTray(): void {
 
 const PROFILE_NAMES: Record<LaunchProfileId, string> = { default: '', boost: 'Boost', potato: 'Potato mode', custom: 'Custom mode' }
 
-function planFor(game: Game, profile?: LaunchProfileId): LaunchPlan {
+async function planFor(game: Game, profile?: LaunchProfileId): Promise<LaunchPlan> {
   const s = getSettings()
-  return buildPlan(game, resolveProfile(game, s, profile), s, detectEngine(game))
+  return buildPlan(game, resolveProfile(game, s, profile), s, detectEngine(game), await hasNvidiaDriver())
 }
 
 async function launchGame(id: string, profile?: LaunchProfileId): Promise<void> {
   const game = requireGame(id)
-  const plan = planFor(game, profile)
+  const plan = await planFor(game, profile)
   if (plan.profile !== 'default') log.info(`Launching ${game.title} in ${plan.profile} mode:`, plan.tokens.join(' ') || '(no launch options)')
   launchModeNote.set(game.id, plan)
   await launcher.launch(game, plan)
@@ -431,6 +432,8 @@ app.whenReady().then(async () => {
   }
   initMedia(dataDir)
   initBackups(dataDir)
+  // Undo driver texture tweaks a crash may have left behind, then warm the NVIDIA check.
+  void recoverClayTextures().then(() => hasNvidiaDriver())
 
   protocol.handle('zenith-media', async (req) => {
     const name = decodeURIComponent(new URL(req.url).pathname.replace(/^\/+/, ''))
@@ -493,6 +496,7 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', () => {
   quitting = true
+  nvidiaShuttingDown()
   launcher.finishAll()
   discord.shutdown()
 })
