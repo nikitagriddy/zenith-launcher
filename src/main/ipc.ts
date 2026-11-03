@@ -8,6 +8,8 @@ import { databaseFile, flushNow } from './db'
 import { deleteMedia, extractExeIcon, getMediaDir, importMediaFile, listMediaFiles } from './media'
 import { addGameWithDefaults, importCandidates, removeGameAndMedia, runScan } from './library'
 import type { GameLauncher } from './launcher'
+import { fetchAllArtwork, fetchArtwork } from './artwork'
+import { checkForUpdates, getUpdateStatus, installUpdate } from './updater'
 import { log } from './log'
 
 export interface IpcContext {
@@ -17,6 +19,9 @@ export interface IpcContext {
   launchGame: (id: string) => Promise<void>
   createShortcut: (id: string, where: 'desktop' | 'startMenu') => string
   onSettingsChanged: (prev: Settings, next: Settings) => void
+  /** Fetch artwork in the background for games that are missing some (respects the auto-artwork setting). */
+  queueArtwork: () => void
+  prepareQuit: () => void
 }
 
 type Handler = (...args: any[]) => unknown
@@ -59,6 +64,7 @@ export function registerIpc(ctx: IpcContext): void {
   handle('games:add', async (input: GameInput) => {
     const g = await addGameWithDefaults(input)
     libraryChanged()
+    ctx.queueArtwork()
     return g
   })
   handle('games:update', (id: unknown, patch: GamePatch) => {
@@ -133,6 +139,7 @@ export function registerIpc(ctx: IpcContext): void {
   handle('scan:import', async (candidates: ScanCandidate[]) => {
     const r = await importCandidates(Array.isArray(candidates) ? candidates : [])
     libraryChanged()
+    if (r.added) ctx.queueArtwork()
     return r
   })
 
@@ -244,6 +251,21 @@ export function registerIpc(ctx: IpcContext): void {
 
   // ---- stats ----
   handle('stats:get', () => repo.getStats())
+
+  // ---- artwork ----
+  handle('art:fetch', async (id: unknown) => {
+    const changed = await fetchArtwork(str(id, 'id'), true)
+    if (changed) libraryChanged()
+    return changed
+  })
+  handle('art:fetchAll', () =>
+    fetchAllArtwork(true, (p) => ctx.send('art:progress', p), libraryChanged)
+  )
+
+  // ---- updates ----
+  handle('update:status', () => getUpdateStatus())
+  handle('update:check', () => checkForUpdates())
+  handle('update:install', () => installUpdate(ctx.prepareQuit))
 
   // ---- window ----
   handle('win:minimize', () => ctx.window()?.minimize())

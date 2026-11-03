@@ -6,6 +6,7 @@ import {
   FolderOpen,
   FolderPlus,
   HardDrive,
+  ImageDown,
   Info,
   Keyboard,
   LibraryBig,
@@ -18,7 +19,7 @@ import {
   Upload,
   X
 } from 'lucide-react'
-import type { AppInfo, BackgroundType, BackupEntry, Category, StorageInfo, ThemeName } from '@shared/types'
+import type { AppInfo, ArtworkProgress, BackgroundType, BackupEntry, Category, StorageInfo, ThemeName, UpdateStatus } from '@shared/types'
 import { ACCENT_PRESETS } from '@shared/settings'
 import { api } from '../lib/api'
 import { useStore, type SettingsTab } from '../lib/store'
@@ -327,6 +328,87 @@ function CategoryRow({ c, count }: { c: Category; count: number }) {
   )
 }
 
+function ArtworkCard() {
+  const auto = useStore((s) => s.settings.library.autoArtwork)
+  const { updateSettings, attempt, toast } = useStore.getState()
+  const [p, setP] = useState<ArtworkProgress | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => api.on('art:progress', (x: ArtworkProgress) => setP(x)), [])
+  const runAll = async () => {
+    setBusy(true)
+    const r = await attempt(() => api.art.fetchAll(), 'Artwork lookup failed')
+    setBusy(false)
+    if (r) toast('success', `Artwork updated for ${r.updated} game${r.updated === 1 ? '' : 's'}`, `${r.checked} checked. Games that couldn't be matched keep their generated cover.`)
+  }
+  const active = busy && p && p.done < p.total
+  return (
+    <Card title="Artwork" description="Real cover art, banners and descriptions from the Epic catalog on this PC and the Steam store.">
+      <SettingRow title="Download artwork automatically" description="For newly added games and any game still missing a cover.">
+        <Toggle checked={auto} onChange={(v) => void updateSettings({ library: { autoArtwork: v } })} />
+      </SettingRow>
+      <SettingRow
+        title="Find artwork for all games"
+        description={active ? `${p!.done}/${p!.total} · ${p!.current}` : 'Fills missing covers, banners and descriptions. Your own images are never replaced.'}
+      >
+        <button className="btn-primary h-9" disabled={busy} onClick={() => void runAll()}>
+          <ImageDown className={cx('h-4 w-4', busy && 'animate-pulse')} /> {busy ? 'Searching…' : 'Find artwork'}
+        </button>
+      </SettingRow>
+      {active && (
+        <div className="mb-2 h-1 overflow-hidden rounded-full bg-line/[0.08]">
+          <div className="h-full bg-accent transition-all" style={{ width: `${(p!.done / Math.max(1, p!.total)) * 100}%` }} />
+        </div>
+      )}
+    </Card>
+  )
+}
+
+function UpdatesCard() {
+  const autoUpdate = useStore((s) => s.settings.general.autoUpdate)
+  const { updateSettings, attempt } = useStore.getState()
+  const [st, setSt] = useState<UpdateStatus | null>(null)
+  useEffect(() => {
+    void api.update.status().then(setSt)
+    return api.on('update:status', (x: UpdateStatus) => setSt(x))
+  }, [])
+  const label: Record<UpdateStatus['state'], string> = {
+    idle: 'Not checked yet',
+    checking: 'Checking for updates…',
+    downloading: `Downloading ${st?.version ?? ''} · ${st?.percent ?? 0}%`,
+    downloaded: `Version ${st?.version ?? ''} is ready to install`,
+    none: 'You’re on the latest version',
+    error: `Update check failed: ${st?.message ?? ''}`,
+    unsupported: st?.message ?? 'Updates unavailable'
+  }
+  return (
+    <Card title="Updates" description="Zenith updates itself from its GitHub releases.">
+      <SettingRow title={st ? label[st.state] : '…'} description={`Installed version ${st?.currentVersion ?? '…'}`}>
+        {st?.state === 'downloaded' ? (
+          <button className="btn-primary h-9" onClick={() => void attempt(() => api.update.install(), 'Could not install update')}>
+            <RotateCcw className="h-4 w-4" /> Restart & update
+          </button>
+        ) : (
+          <button
+            className="btn-ghost h-9"
+            disabled={!st || st.state === 'unsupported' || st.state === 'checking' || st.state === 'downloading'}
+            onClick={() => void attempt(() => api.update.check().then(setSt), 'Update check failed')}
+          >
+            <Download className="h-4 w-4" /> Check now
+          </button>
+        )}
+      </SettingRow>
+      {st?.state === 'downloading' && (
+        <div className="mb-2 h-1 overflow-hidden rounded-full bg-line/[0.08]">
+          <div className="h-full bg-accent transition-all" style={{ width: `${st.percent ?? 0}%` }} />
+        </div>
+      )}
+      <SettingRow title="Update automatically" description="Checks on startup and every 6 hours, downloads in the background, installs when you quit.">
+        <Toggle checked={autoUpdate} onChange={(v) => void updateSettings({ general: { autoUpdate: v } })} />
+      </SettingRow>
+    </Card>
+  )
+}
+
 function LibraryTab() {
   const l = useStore((s) => s.settings.library)
   const categories = useStore((s) => s.categories)
@@ -385,6 +467,8 @@ function LibraryTab() {
           <Toggle checked={l.showHidden} onChange={(v) => set({ showHidden: v })} />
         </SettingRow>
       </Card>
+
+      <ArtworkCard />
 
       <Card title="Collections" description="Group games your way - genres, moods, co-op nights. A game can be in several.">
         <div className="mt-2">
@@ -772,6 +856,8 @@ function AboutTab() {
   const [info, setInfo] = useState<AppInfo | null>(null)
   useEffect(() => void api.app.info().then(setInfo), [])
   return (
+    <>
+    <UpdatesCard />
     <section className="panel relative overflow-hidden p-10 animate-page-in">
       <div className="starfield absolute inset-0 opacity-50" />
       <div className="absolute -right-20 -top-28 h-80 w-80 rounded-full border border-accent/20" />
@@ -800,6 +886,7 @@ function AboutTab() {
         )}
       </div>
     </section>
+    </>
   )
 }
 

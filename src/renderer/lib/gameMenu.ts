@@ -1,4 +1,4 @@
-import { Eye, EyeOff, FolderOpen, Info, Link, Pencil, Play, Star, Trash2, MonitorSmartphone } from 'lucide-react'
+import { Eye, EyeOff, FolderOpen, ImageDown, Info, Link, Pencil, Play, Star, Trash2, MonitorSmartphone } from 'lucide-react'
 import type { Game } from '@shared/types'
 import { api } from './api'
 import { useStore, type MenuItem } from './store'
@@ -21,6 +21,15 @@ export function gameMenuItems(game: Game): MenuItem[] {
           await api.games.update(game.id, { hidden: !game.hidden })
           s.toast('success', game.hidden ? 'Game is visible again' : 'Game hidden', game.hidden ? undefined : 'Find it under the Hidden filter in your library.')
         })
+    },
+    {
+      label: 'Find artwork online',
+      icon: ImageDown,
+      onClick: () =>
+        void s.attempt(async () => {
+          const changed = await api.art.fetch(game.id)
+          s.toast(changed ? 'success' : 'info', changed ? 'Artwork updated' : 'No new artwork found', changed ? game.title : 'Remove the current cover/banner in Edit to replace it, or pick your own image.')
+        }, 'Artwork lookup failed')
     },
     { separator: true, label: '' },
     {

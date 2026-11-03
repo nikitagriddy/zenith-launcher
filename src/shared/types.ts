@@ -84,6 +84,21 @@ export interface ScanProgress {
   found: number
 }
 
+export interface ArtworkProgress {
+  done: number
+  total: number
+  current: string
+}
+
+export interface UpdateStatus {
+  state: 'idle' | 'checking' | 'downloading' | 'downloaded' | 'none' | 'error' | 'unsupported'
+  currentVersion: string
+  version?: string
+  percent?: number
+  message?: string
+  checkedAt?: number
+}
+
 export interface RunningInfo {
   gameId: string
   startedAt: number
@@ -148,6 +163,7 @@ export interface Settings {
     closeToTray: boolean
     globalHotkey: string
     showNotifications: boolean
+    autoUpdate: boolean
   }
   appearance: {
     theme: ThemeName
@@ -173,6 +189,7 @@ export interface Settings {
     showNotInstalled: boolean
     showHidden: boolean
     showCardInfo: boolean
+    autoArtwork: boolean
   }
   scanning: {
     folders: string[]
@@ -211,6 +228,8 @@ export type MainEvent =
   | 'navigate'
   | 'win:maximized'
   | 'data:restored'
+  | 'art:progress'
+  | 'update:status'
 
 export interface ToastPayload {
   kind: 'info' | 'success' | 'error'
@@ -269,6 +288,15 @@ export interface ZenithApi {
   }
   stats: {
     get(): Promise<StatsSummary>
+  }
+  art: {
+    fetch(gameId: string): Promise<boolean>
+    fetchAll(): Promise<{ updated: number; checked: number }>
+  }
+  update: {
+    status(): Promise<UpdateStatus>
+    check(): Promise<UpdateStatus>
+    install(): Promise<void>
   }
   win: {
     minimize(): Promise<void>

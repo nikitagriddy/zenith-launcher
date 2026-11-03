@@ -29,8 +29,8 @@ export const GameCard = memo(function GameCard({ game, width }: { game: Game; wi
 
   return (
     <div
-      className="game-card group cursor-pointer"
-      style={width ? { width } : undefined}
+      className={cx('game-card group cursor-pointer', !!width && 'shrink-0')}
+      style={width ? { width, minWidth: width } : undefined}
       onClick={() => navigate({ page: 'game', id: game.id })}
       onDoubleClick={() => game.installed && !running && void launch(game.id)}
       onContextMenu={(e) => openGameMenu(e, game)}

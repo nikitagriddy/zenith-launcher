@@ -1,4 +1,4 @@
-// Bundles the Electron main + preload processes with esbuild.
+﻿// Bundles the Electron main + preload processes with esbuild.
 import { build, context } from 'esbuild'
 import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
@@ -11,7 +11,7 @@ export function options(dev = false) {
     platform: 'node',
     target: 'node22',
     format: 'cjs',
-    external: ['electron', 'sql.js'],
+    external: ['electron', 'sql.js', 'electron-updater'],
     sourcemap: dev ? 'inline' : false,
     minify: !dev,
     logLevel: 'info',

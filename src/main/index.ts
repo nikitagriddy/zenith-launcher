@@ -23,6 +23,8 @@ import { GameLauncher } from './launcher'
 import { registerIpc } from './ipc'
 import { getSettings, listGames, markLaunched, recordSession, requireGame } from './repo'
 import { importCandidates, runScan } from './library'
+import { fetchAllArtwork } from './artwork'
+import { initUpdater, setAutoCheck } from './updater'
 
 if (process.env.ZENITH_USER_DATA) app.setPath('userData', path.resolve(process.env.ZENITH_USER_DATA))
 
@@ -287,6 +289,13 @@ function handleArgv(argv: string[]): void {
   })
 }
 
+function queueArtwork(): void {
+  if (!getSettings().library.autoArtwork) return
+  void fetchAllArtwork(false, (p) => send('art:progress', p), () => send('library:changed')).catch((err) =>
+    log.warn('Background artwork fetch failed', err)
+  )
+}
+
 // ---------- settings side-effects ----------
 
 function applyHotkey(accel: string): void {
@@ -330,6 +339,7 @@ async function autoScan(): Promise<void> {
       const res = await importCandidates(r.candidates)
       if (res.added) {
         send('library:changed')
+        queueArtwork()
         toast({ kind: 'success', title: 'Library updated', message: `Found and added ${res.added} new game(s).` })
       }
     } else {
@@ -348,6 +358,8 @@ function onSettingsChanged(prev: Settings, next: Settings): void {
     applyLoginItem(next)
   }
   if (prev.scanning.autoScanIntervalMin !== next.scanning.autoScanIntervalMin) scheduleAutoScan(next)
+  if (prev.general.autoUpdate !== next.general.autoUpdate) setAutoCheck(next.general.autoUpdate)
+  if (!prev.library.autoArtwork && next.library.autoArtwork) queueArtwork()
   send('settings:changed', next)
 }
 
@@ -386,7 +398,19 @@ app.whenReady().then(async () => {
   })
 
   Menu.setApplicationMenu(null)
-  registerIpc({ window: () => mainWindow, launcher, send, launchGame, createShortcut, onSettingsChanged })
+  registerIpc({
+    window: () => mainWindow,
+    launcher,
+    send,
+    launchGame,
+    createShortcut,
+    onSettingsChanged,
+    queueArtwork,
+    prepareQuit: () => {
+      quitting = true
+      launcher.finishAll()
+    }
+  })
   createWindow()
   createTray()
 
@@ -396,6 +420,11 @@ app.whenReady().then(async () => {
   scheduleAutoScan(s)
   handleArgv(process.argv)
   setTimeout(maybeAutoBackup, 15_000)
+  setTimeout(queueArtwork, 6000)
+  initUpdater((st) => {
+    send('update:status', st)
+    if (st.state === 'downloaded') toast({ kind: 'success', title: `Zenith ${st.version} is ready`, message: 'Restart from Settings › About, or it installs when you quit.' })
+  }, s.general.autoUpdate)
   if (s.scanning.autoScanOnStartup) setTimeout(() => void autoScan(), 4000)
 })
 

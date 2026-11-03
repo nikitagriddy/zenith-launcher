@@ -60,7 +60,7 @@ await shot('01-onboarding')
 
 // Test-only: avoid window minimizing during launch, disable store detection.
 await api(
-  (f) => window.zenith.settings.set({ general: { minimizeOnLaunch: false }, scanning: { folders: [f], detectSteam: false, detectEpic: false } }),
+  (f) => window.zenith.settings.set({ general: { minimizeOnLaunch: false }, library: { autoArtwork: false }, scanning: { folders: [f], detectSteam: false, detectEpic: false } }),
   games
 )
 
@@ -103,6 +103,13 @@ const bad = await api(() =>
 )
 check(bad !== 'added', `game without executable rejected: ${bad}`)
 
+// Real artwork from the Steam store (needs internet).
+const dbd = await api((exe) => window.zenith.games.add({ title: 'Dead by Daylight', exePath: exe }), pq.exePath)
+const gotArt = await api((id) => window.zenith.art.fetch(id), dbd.id)
+const dbdAfter = await api((id) => window.zenith.games.list().then((l) => l.find((g) => g.id === id)), dbd.id)
+check(gotArt && !!dbdAfter.cover && !!dbdAfter.hero && !!dbdAfter.description, `real cover, banner and description downloaded (${dbdAfter.developer || 'no dev'})`)
+await api((id) => window.zenith.games.remove(id), dbd.id)
+
 // Favorites, collections, settings.
 await api((id) => window.zenith.games.toggleFavorite(id), pq.id)
 const cat = await api(() => window.zenith.categories.create('Roguelikes', '#3ee08f'))
@@ -132,6 +139,17 @@ await page.waitForTimeout(300)
 const accent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim())
 check(accent === '56 200 245', `accent color applies live (${accent})`)
 await shot('08-settings-appearance')
+await api(() => window.zenith.settings.set({ appearance: { uiScale: 105 } }))
+await page.waitForTimeout(400)
+const knobOk = await page.evaluate(() =>
+  [...document.querySelectorAll('button[role=switch]')].every((b) => {
+    const t = b.getBoundingClientRect()
+    const k = b.firstElementChild.getBoundingClientRect()
+    return k.left >= t.left - 0.5 && k.right <= t.right + 0.5
+  })
+)
+check(knobOk, 'toggle knobs stay inside their tracks at 105% scale')
+await api(() => window.zenith.settings.set({ appearance: { uiScale: 100 } }))
 await page.getByRole('button', { name: 'Paper' }).click()
 await page.waitForTimeout(300)
 await shot('09-light-theme')

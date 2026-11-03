@@ -11,14 +11,15 @@ export function Toggle({ checked, onChange, disabled }: { checked: boolean; onCh
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cx(
-        'relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-40',
-        checked ? 'bg-accent' : 'bg-line/15'
+        'relative block h-6 w-11 shrink-0 rounded-full p-0 transition-colors duration-200 disabled:opacity-40',
+        checked ? 'bg-accent' : 'bg-line/20'
       )}
     >
+      {/* rem-based offsets so the knob stays inside the track at every interface scale */}
       <span
         className={cx(
-          'absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200',
-          checked ? 'translate-x-[22px]' : 'translate-x-0.5'
+          'absolute left-0.5 top-0.5 block h-5 w-5 rounded-full shadow-md transition-transform duration-200',
+          checked ? 'translate-x-5 bg-on-accent' : 'translate-x-0 bg-white'
         )}
       />
     </button>

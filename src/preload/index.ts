@@ -70,6 +70,15 @@ const api: ZenithApi = {
   stats: {
     get: () => invoke('stats:get')
   },
+  art: {
+    fetch: (id) => invoke('art:fetch', id),
+    fetchAll: () => invoke('art:fetchAll')
+  },
+  update: {
+    status: () => invoke('update:status'),
+    check: () => invoke('update:check'),
+    install: () => invoke('update:install')
+  },
   win: {
     minimize: () => invoke('win:minimize'),
     toggleMaximize: () => invoke('win:toggleMaximize'),

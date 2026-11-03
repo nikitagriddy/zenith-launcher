@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Copy, Minus, Search, Square, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Copy, ImageDown, Minus, Search, Square, X } from 'lucide-react'
+import type { ArtworkProgress } from '@shared/types'
 import { api } from '../lib/api'
 import { useStore } from '../lib/store'
 import { cx, formatClock } from '../lib/format'
@@ -29,6 +30,21 @@ function RunningIndicator() {
       {first.tracking === 'process' && <span className="num text-xs text-fg/80">{formatClock((now - first.startedAt) / 1000)}</span>}
       {list.length > 1 && <span className="readout">+{list.length - 1}</span>}
     </button>
+  )
+}
+
+function ArtworkIndicator() {
+  const [p, setP] = useState<ArtworkProgress | null>(null)
+  useEffect(() => api.on('art:progress', (x: ArtworkProgress) => setP(x.done >= x.total ? null : x)), [])
+  if (!p) return null
+  return (
+    <div className="no-drag flex h-8 items-center gap-2.5 rounded-lg border border-line/[0.1] bg-surface/60 px-3" title={p.current}>
+      <ImageDown className="h-3.5 w-3.5 animate-pulse text-accent" />
+      <span className="readout">Artwork</span>
+      <span className="num text-xs">
+        {p.done}/{p.total}
+      </span>
+    </div>
   )
 }
 
@@ -89,6 +105,7 @@ export function TitleBar() {
       </div>
 
       <div className="flex-1" />
+      <ArtworkIndicator />
       <RunningIndicator />
 
       <div className="no-drag flex h-full items-center">

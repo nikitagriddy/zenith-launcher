@@ -35,10 +35,10 @@ export function Modal({
   if (!open) return null
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6 animate-fade-in">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onMouseDown={onClose} />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onMouseDown={onClose} />
       <div
         className={cx(
-          'glass relative flex max-h-[calc(100vh-80px)] w-full flex-col overflow-hidden rounded-3xl shadow-2xl shadow-black/50 animate-pop-in',
+          'glass relative flex max-h-[calc(100vh-80px)] !bg-surface/95 w-full flex-col overflow-hidden rounded-3xl shadow-2xl shadow-black/50 animate-pop-in',
           width
         )}
         role="dialog"

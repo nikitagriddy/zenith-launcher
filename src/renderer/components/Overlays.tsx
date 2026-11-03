@@ -1,4 +1,4 @@
-// Global overlays: toasts, confirm dialog and context menu.
+﻿// Global overlays: toasts, confirm dialog and context menu.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, CheckCircle2, Info, X } from 'lucide-react'
@@ -16,7 +16,7 @@ export function Toasts() {
         return (
           <div
             key={t.id}
-            className="glass pointer-events-auto flex items-start gap-3 rounded-2xl p-4 shadow-2xl shadow-black/40 animate-slide-in-right"
+            className="glass !bg-surface/95 pointer-events-auto flex items-start gap-3 rounded-2xl p-4 shadow-2xl shadow-black/40 animate-slide-in-right"
           >
             <Icon
               className={cx(
@@ -101,7 +101,7 @@ export function ContextMenu() {
   return createPortal(
     <div
       ref={ref}
-      className="glass fixed z-[80] min-w-[220px] rounded-xl p-1.5 shadow-2xl shadow-black/50 animate-pop-in"
+      className="glass !bg-surface/95 fixed z-[80] min-w-[220px] rounded-xl p-1.5 shadow-2xl shadow-black/50 animate-pop-in"
       style={{ left: pos.x || menu.x, top: pos.y || menu.y }}
       onContextMenu={(e) => e.preventDefault()}
     >

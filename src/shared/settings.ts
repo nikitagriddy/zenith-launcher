@@ -19,7 +19,8 @@ export const DEFAULT_SETTINGS: Settings = {
     restoreAfterExit: true,
     closeToTray: true,
     globalHotkey: 'Control+Alt+Z',
-    showNotifications: true
+    showNotifications: true,
+    autoUpdate: true
   },
   appearance: {
     theme: 'dark',
@@ -44,7 +45,8 @@ export const DEFAULT_SETTINGS: Settings = {
     sortDir: 'asc',
     showNotInstalled: true,
     showHidden: false,
-    showCardInfo: true
+    showCardInfo: true,
+    autoArtwork: true
   },
   scanning: {
     folders: [],

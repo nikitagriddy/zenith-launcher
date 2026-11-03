@@ -63,9 +63,25 @@ export function GameCover({
   const src = variant === 'landscape' ? game.hero || game.cover : game.cover
   const [failed, setFailed] = useState<string | null>(null)
   const ok = src && failed !== src
+  // Portrait slot with only a wide banner: blurred banner fills, sharp banner sits in the middle.
+  const bannerOnly = variant === 'portrait' && !ok && game.hero && failed !== game.hero
   return (
     <div className={cx('relative overflow-hidden bg-elevated', className)}>
-      {ok ? (
+      {bannerOnly ? (
+        <div className={cx('cover-img absolute inset-0', imgClassName)}>
+          <img src={mediaUrl(game.hero)} className="absolute inset-0 h-full w-full scale-150 object-cover opacity-80 blur-xl" alt="" draggable={false} />
+          <img
+            src={mediaUrl(game.hero)}
+            onError={() => setFailed(game.hero)}
+            className="absolute left-0 top-1/2 w-full -translate-y-1/2 shadow-2xl shadow-black/60"
+            alt=""
+            draggable={false}
+          />
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-3 pt-10">
+            <div className="line-clamp-2 font-display text-[13px] font-semibold uppercase leading-tight tracking-wide text-white/90">{game.title}</div>
+          </div>
+        </div>
+      ) : ok ? (
         <img
           src={mediaUrl(src)}
           onError={() => setFailed(src)}
