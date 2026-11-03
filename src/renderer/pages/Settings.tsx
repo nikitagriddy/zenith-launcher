@@ -381,7 +381,7 @@ function AppearanceTab() {
 // ---------------- Launch modes ----------------
 
 const ENGINE_ROWS: [string, string][] = [
-  ['Unreal Engine', 'Lowest scalability settings, lower render scale and resolution, through -ExecCmds and -ResX/-ResY.'],
+  ['Unreal Engine (Fortnite too)', 'The game’s own settings file: lowest settings, lower 3D resolution, lower resolution in fullscreen. Put back when the game closes. Plus -ExecCmds/-ResX where the store allows launch options.'],
   ['Unity', 'Lowest quality level (when the game uses Unity’s standard names) and resolution.'],
   ['Source and Source 2', 'Resolution.'],
   ['Godot', 'Resolution.'],
@@ -429,7 +429,7 @@ function LaunchTab() {
         </SettingRow>
       </Card>
 
-      <Card title="Potato" description="The lowest graphics a game's engine accepts at launch. Your game's own settings files are never edited, so the next normal launch looks like before.">
+      <Card title="Potato" description="The lowest graphics and fewest pixels a game will take, for the most FPS. Everything is put back when the game closes, so the next normal launch looks like before.">
         <SettingRow title="Resolution">
           <Select
             className="h-9 w-48"
@@ -443,7 +443,7 @@ function LaunchTab() {
             ]}
           />
         </SettingRow>
-        <SettingRow title="Render scale (Unreal Engine)" description="Draws the 3D world at this share of the resolution. Lower is blurrier and faster.">
+        <SettingRow title="3D resolution (Unreal Engine, Fortnite)" description="Draws the 3D world at this share of the screen resolution. The biggest FPS boost: lower is blurrier and faster.">
           <div className="w-56">
             <Slider value={l.potatoRenderScale} min={25} max={100} step={5} onChange={(v) => set({ potatoRenderScale: v })} format={(v) => `${v}%`} />
           </div>
@@ -472,9 +472,10 @@ function LaunchTab() {
         )}
         <div className="mb-3 rounded-xl border border-line/[0.08] bg-bg/40 p-4 text-xs leading-relaxed text-muted">
           <div className="mb-1 text-sm font-semibold text-fg">Is this safe for online games?</div>
-          Zenith only uses launch options and your graphics driver’s own per-game settings, the same thing NVIDIA Control Panel changes. It never edits,
-          deletes or injects into game files, and never touches the game while it runs. Driver texture changes are switched on right before the game
-          starts and removed when it closes. That’s the lowest-risk way to do this, but no tool can promise a game will never change its rules.
+          Zenith only changes things you could change yourself: launch options, the game’s settings file (the one its own Graphics menu saves, with
+          values that menu allows) and your graphics driver’s per-game settings (like NVIDIA Control Panel). It never edits, deletes or injects into the
+          game’s installed files and never touches the game while it runs. Everything is switched on right before the game starts and put back when it
+          closes. That’s the lowest-risk way to do this, but no tool can promise a game will never change its rules.
         </div>
         <dl className="mt-3 divide-y divide-line/[0.06] rounded-xl border border-line/[0.08]">
           {ENGINE_ROWS.map(([engine, what]) => (

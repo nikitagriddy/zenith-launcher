@@ -42,6 +42,12 @@ export interface Game {
   installed: boolean
 }
 
+export interface IniEdit {
+  section: string
+  key: string
+  value: string
+}
+
 export type LaunchProfileId = 'default' | 'boost' | 'potato' | 'custom'
 
 export interface GameEngine {
@@ -64,6 +70,9 @@ export interface LaunchPlan {
   driverLodBias: number | null
   /** Executable name the NVIDIA driver profile is matched on. */
   driverExe: string
+  /** Unreal games: the game's GameUserSettings.ini and the lines Potato sets in it for the session. */
+  settingsFile: string
+  settingsEdits: IniEdit[]
   engine: GameEngine
   applies: string[]
   limits: string[]

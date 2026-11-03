@@ -30,10 +30,12 @@ export function LaunchModePicker({ game, anchor, onClose }: { game: Game; anchor
   useLayoutEffect(() => {
     const r = anchor.getBoundingClientRect()
     const w = ref.current?.offsetWidth ?? 400
-    const h = ref.current?.offsetHeight ?? 420
-    const below = r.bottom + 8 + h < window.innerHeight
-    setPos({ left: Math.min(Math.max(8, r.left), window.innerWidth - w - 8), top: below ? r.bottom + 8 : Math.max(8, r.top - h - 8) })
-  }, [anchor, plans])
+    const h = Math.min(ref.current?.scrollHeight ?? 420, window.innerHeight - 16)
+    // Below the button if it fits, else above, else pinned to the window so the whole menu stays reachable.
+    const top =
+      r.bottom + 8 + h <= window.innerHeight ? r.bottom + 8 : r.top - h - 8 >= 8 ? r.top - h - 8 : Math.max(8, window.innerHeight - h - 8)
+    setPos({ left: Math.min(Math.max(8, r.left), window.innerWidth - w - 8), top })
+  }, [anchor, plans, hover])
 
   useEffect(() => {
     const down = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && !anchor.contains(e.target as Node) && onClose()
@@ -57,8 +59,8 @@ export function LaunchModePicker({ game, anchor, onClose }: { game: Game; anchor
     <div
       ref={ref}
       role="menu"
-      className="glass fixed z-[80] w-[400px] overflow-hidden rounded-2xl !bg-surface/95 shadow-2xl shadow-black/50 animate-pop-in"
-      style={pos}
+      className="glass fixed z-[80] w-[400px] overflow-y-auto rounded-2xl !bg-surface/95 shadow-2xl shadow-black/50 animate-pop-in"
+      style={{ ...pos, maxHeight: 'calc(100vh - 16px)' }}
     >
       <div className="px-4 pb-2 pt-3.5 text-sm font-semibold">Launch {game.title}</div>
       <div className="px-2">

@@ -4,7 +4,7 @@
 import { _electron } from 'playwright-core'
 import { createRequire } from 'node:module'
 import { execFileSync } from 'node:child_process'
-import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 const require = createRequire(import.meta.url)
@@ -19,6 +19,20 @@ copyFileSync(join(sys32, 'cmd.exe'), join(ue, 'Starfall.exe'))
 copyFileSync(join(sys32, 'PING.EXE'), join(ue, 'Starfall', 'Binaries', 'Win64', 'Starfall-Win64-Shipping.exe'))
 copyFileSync(join(sys32, 'cmd.exe'), join(unity, 'PixelDrift.exe'))
 writeFileSync(join(unity, 'UnityPlayer.dll'), 'x')
+// Fake %LOCALAPPDATA% with a Fortnite-style settings file for the fake Unreal game (your real one is never used).
+const localApp = join(root, 'LocalAppData')
+const iniDir = join(localApp, 'Starfall', 'Saved', 'Config', 'WindowsClient')
+mkdirSync(iniDir, { recursive: true })
+const ini = join(iniDir, 'GameUserSettings.ini')
+const iniOriginal = [
+  '[/Script/Starfall.StarfallUserSettings]', 'bMotionBlur=True', 'bShowGrass=True', 'ResolutionSizeX=1920', 'ResolutionSizeY=1080',
+  'LastUserConfirmedResolutionSizeX=1920', 'LastUserConfirmedResolutionSizeY=1080', 'LastConfirmedFullscreenMode=1', 'PreferredFullscreenMode=1',
+  'FrameRateLimit=240.000000', 'DesiredScreenWidth=1920', 'DesiredScreenHeight=1080', '', '[ScalabilityGroups]', 'sg.ResolutionQuality=100',
+  'sg.ViewDistanceQuality=3', 'sg.AntiAliasingQuality=3', 'sg.ShadowQuality=3', 'sg.GlobalIlluminationQuality=3', 'sg.ReflectionQuality=3',
+  'sg.PostProcessQuality=3', 'sg.TextureQuality=3', 'sg.EffectsQuality=3', 'sg.FoliageQuality=3', 'sg.ShadingQuality=3', '', '[ChatSettings]', 'Volume=0.5', ''
+].join('\r\n')
+writeFileSync(ini, iniOriginal)
+const iniVal = (key) => new RegExp('^' + key.replace('.', '\\.') + '=(.*)$', 'm').exec(readFileSync(ini, 'utf8'))?.[1]?.trim() ?? null
 writeFileSync(join(unity, 'PixelDrift_Data', 'globalgamemanagers'), Buffer.concat([Buffer.alloc(20), Buffer.from('2022.3.10f1\0'), Buffer.alloc(200)]))
 
 // The fake game keeps running ~5 s and ignores whatever options follow "rem"; we read its real command line from Windows.
@@ -61,9 +75,9 @@ const nvdrs = (...a) => {
 }
 const lodBias = (exe) => /value\.0x00738E8F=custom:(\d+)/.exec(nvdrs('get', exe, '0x00738E8F'))?.[1] ?? null
 const hasProfile = (exe) => !nvdrs('get', exe, '0x00738E8F').includes('profile=none')
-const launchApp = () => _electron.launch({ executablePath: require('electron'), args: ['.'], env: { ...process.env, ZENITH_USER_DATA: join(root, 'user') } })
+const launchApp = () => _electron.launch({ executablePath: require('electron'), args: ['.'], env: { ...process.env, ZENITH_USER_DATA: join(root, 'user'), LOCALAPPDATA: localApp } })
 
-const app = await _electron.launch({ executablePath: require('electron'), args: ['.'], env: { ...process.env, ZENITH_USER_DATA: join(root, 'user') } })
+const app = await _electron.launch({ executablePath: require('electron'), args: ['.'], env: { ...process.env, ZENITH_USER_DATA: join(root, 'user'), LOCALAPPDATA: localApp } })
 const p = await app.firstWindow()
 await p.getByText('is empty.').waitFor({ timeout: 20000 })
 const api = (fn, arg) => p.evaluate(fn, arg)
@@ -104,9 +118,11 @@ check(pdPlans.potato.tokens.includes('-screen-quality "Very Low"') && pdPlans.po
 const plainPlans = await api((id) => window.zenith.games.launchPlans(id), plain.id)
 check(plainPlans.potato.tokens.length === 0 && plainPlans.potato.limits.some((l) => /not recognized/.test(l)), 'Unknown engine: honest "graphics stay as they are"')
 const epicPlans = await api((id) => window.zenith.games.launchPlans(id), epic.id)
-check(epicPlans.potato.tokens.length === 0 && epicPlans.potato.limits.some((l) => /Epic Games doesn't accept/.test(l)), 'Epic game: says launch options can’t be passed')
+check(epicPlans.potato.tokens.length === 0 && epicPlans.potato.settingsEdits.length > 0 && epicPlans.potato.limits.length === 0, 'Epic game: no launch options, real Potato through its settings file')
 check(sfPlans.potato.driverLodBias === 20 && sfPlans.potato.driverExe === 'Starfall-Win64-Shipping.exe', 'Potato on NVIDIA: clay textures (+2.5) on the real game exe')
-check(epicPlans.potato.driverLodBias === 20 && epicPlans.potato.limits.some((l) => /only textures are lowered/.test(l)), 'Epic game still gets clay textures through the driver')
+check(epicPlans.potato.driverLodBias === 20, 'Epic game also gets clay textures through the driver')
+check(sfPlans.potato.settingsFile === ini && sfPlans.potato.applies.some((a) => /Game settings: lowest graphics, 50% 3D resolution, 1280×720 fullscreen/.test(a)), 'Unreal: Potato uses the game’s own settings file')
+check(sfPlans.boost.settingsEdits.length === 0 && sfPlans.default.settingsEdits.length === 0, 'Boost and Default never touch the settings file')
 check(sfPlans.boost.driverLodBias === null && sfPlans.default.driverLodBias === null, 'Boost and Default never touch the driver')
 await api(() => window.zenith.settings.set({ launch: { potatoResolution: 'native', potatoRenderScale: 70 } }))
 const sfNative = await api((id) => window.zenith.games.launchPlans(id), sf.id)
@@ -127,6 +143,10 @@ await p.waitForTimeout(700)
 const line = cmdline('Starfall.exe')
 await p.waitForTimeout(3100)
 const clayDuring = lodBias('Starfall-Win64-Shipping.exe')
+check(iniVal('sg.ResolutionQuality') === '50' && iniVal('sg.ShadowQuality') === '0' && iniVal('ResolutionSizeX') === '1280' && iniVal('PreferredFullscreenMode') === '0' && iniVal('bMotionBlur') === 'False', 'settings file has Potato values while playing')
+check(iniVal('FrameRateLimit') === '240.000000' && iniVal('Volume') === '0.5' && readFileSync(ini, 'utf8').includes('\r\n'), 'other lines and Windows line endings left alone')
+// Simulate the player changing a setting in-game and the game saving a new line on exit.
+writeFileSync(ini, readFileSync(ini, 'utf8').replace('sg.TextureQuality=0', 'sg.TextureQuality=2').replace('Volume=0.5', 'Volume=0.5\r\nPushToTalk=True'))
 check(clayDuring === '20', `NVIDIA driver profile has clay textures while playing (LOD bias value ${clayDuring})`)
 check(priority('Starfall') === 'High', `Boosted game runs at High CPU priority (${priority('Starfall') || 'not found'})`)
 check(gpuPref(join(ue, 'Starfall.exe')) && gpuPref(join(ue, 'Starfall', 'Binaries', 'Win64', 'Starfall-Win64-Shipping.exe')), 'High-performance GPU set for the game and its real exe')
@@ -140,6 +160,8 @@ const saved = (await api(() => window.zenith.games.list())).find((g) => g.id ===
 check(saved.launchProfile === 'potato', '"Always launch this way" saved Potato for the game')
 await new Promise((r) => setTimeout(r, 4000))
 check(!hasProfile('Starfall-Win64-Shipping.exe'), 'driver profile Zenith made is removed after the game closed')
+check(iniVal('sg.ResolutionQuality') === '100' && iniVal('ResolutionSizeX') === '1920' && iniVal('PreferredFullscreenMode') === '1' && iniVal('bMotionBlur') === 'True', 'your own settings are back after the game closed')
+check(iniVal('sg.TextureQuality') === '2' && iniVal('PushToTalk') === 'True', 'in-game changes made during the session are kept')
 await p.waitForTimeout(500)
 await p.screenshot({ path: join(shots, 'play-button.png') })
 
@@ -157,10 +179,10 @@ await p.getByRole('button', { name: 'Launch modes' }).click()
 await p.waitForTimeout(600)
 await p.screenshot({ path: join(shots, 'settings.png'), fullPage: false })
 // ---- crash recovery: kill Zenith mid-game, restart, the driver tweak is cleaned up ----
-await api((id) => window.zenith.games.launch(id, 'potato'), pd.id)
-await until(async (id) => (await window.zenith.games.running()).some((r) => r.gameId === id), pd.id)
+await api((id) => window.zenith.games.launch(id, 'potato'), sf.id)
+await until(async (id) => (await window.zenith.games.running()).some((r) => r.gameId === id), sf.id)
 await new Promise((r) => setTimeout(r, 1000))
-check(lodBias('PixelDrift.exe') === '20', 'clay textures on for the Unity game')
+check(lodBias('Starfall-Win64-Shipping.exe') === '20' && iniVal('sg.ResolutionQuality') === '50', 'Potato on again for the crash test')
 execFileSync('taskkill', ['/PID', String(app.process().pid), '/T', '/F'], { stdio: 'ignore' })
 // Let the killed instance's helper processes exit so the single-instance lock is free.
 for (let i = 0; i < 20; i++) {
@@ -170,15 +192,15 @@ for (let i = 0; i < 20; i++) {
     break
   } catch {}
 }
-check(lodBias('PixelDrift.exe') === '20', 'after a crash the setting is still there (expected)')
+check(lodBias('Starfall-Win64-Shipping.exe') === '20' && iniVal('sg.ResolutionQuality') === '50', 'after a crash the changes are still there (expected)')
 const app2 = await launchApp()
 await (await app2.firstWindow()).waitForFunction(() => !!window.zenith)
 let cleaned = false
 for (let i = 0; i < 40 && !cleaned; i++) {
   await new Promise((r) => setTimeout(r, 500))
-  cleaned = !hasProfile('PixelDrift.exe')
+  cleaned = !hasProfile('Starfall-Win64-Shipping.exe') && iniVal('sg.ResolutionQuality') === '100'
 }
-check(cleaned, 'next start removes the leftover driver setting')
+check(cleaned, 'next start puts back the driver setting and the settings file')
 await app2.close()
 console.log(bad ? `\n${bad} check(s) failed` : '\nAll launch-mode checks passed')
 process.exit(bad ? 1 : 0)

@@ -1,5 +1,6 @@
 // Temporary per-session system tweaks for launch modes. Every change returns an undo function.
 import { execFile, execFileSync } from 'node:child_process'
+import os from 'node:os'
 import { log } from './log'
 
 const GPU_KEY = 'HKCU\\Software\\Microsoft\\DirectX\\UserGpuPreferences'
@@ -86,16 +87,31 @@ export function useHighPerformancePlan(): (() => void) | null {
 
 // ---------- CPU priority ----------
 
-/** Raise the priority of running processes with these image names (elevated/protected ones are skipped). */
+/**
+ * Raise the priority of running processes with these image names. Uses tasklist + SetPriorityClass
+ * directly (no PowerShell). Processes guarded by anti-cheat or running as admin may refuse; that's fine.
+ */
 export function raisePriority(imageNames: string[]): void {
-  const names = [...new Set(imageNames.map((n) => n.toLowerCase().replace(/\.exe$/, '')))].filter(Boolean)
-  if (!names.length) return
-  const list = names.map((n) => `'${n.replace(/'/g, "''")}'`).join(',')
-  const script = `$n=@(${list}); Get-Process | Where-Object { $n -contains $_.ProcessName.ToLower() } | ForEach-Object { try { if ($_.PriorityClass -ne 'High') { $_.PriorityClass = 'High' } } catch {} }`
-  execFile(
-    'powershell.exe',
-    ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
-    { windowsHide: true, timeout: 15_000 },
-    (err) => err && log.warn('Could not raise game priority', err.message)
-  )
+  const names = new Set(imageNames.map((n) => n.toLowerCase()).filter(Boolean))
+  if (!names.size) return
+  try {
+    execFile('tasklist', ['/FO', 'CSV', '/NH'], { windowsHide: true, maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => {
+      if (err) return log.warn('Could not list processes for priority boost', err.message)
+      let raised = 0
+      let refused = 0
+      for (const line of stdout.split(/\r?\n/)) {
+        const m = /^"([^"]+)","(\d+)"/.exec(line)
+        if (!m || !names.has(m[1]!.toLowerCase())) continue
+        try {
+          if (os.getPriority(Number(m[2])) !== os.constants.priority.PRIORITY_HIGH) os.setPriority(Number(m[2]), os.constants.priority.PRIORITY_HIGH)
+          raised++
+        } catch {
+          refused++
+        }
+      }
+      if (refused) log.info(`Priority boost: ${raised} process(es) raised, ${refused} refused (anti-cheat or admin)`)
+    })
+  } catch (err) {
+    log.warn('Could not start priority boost', (err as Error).message)
+  }
 }

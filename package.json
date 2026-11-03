@@ -1,7 +1,7 @@
 {
   "name": "zenith-launcher",
   "productName": "Zenith",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "Zenith - a fast, beautiful game launcher for Windows.",
   "main": "out/main/index.js",
   "author": "Zenith",

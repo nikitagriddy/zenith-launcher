@@ -8,6 +8,7 @@ import { SYSTEM_PROCESS_NAMES, isDriveRoot, walkExes } from './exe'
 import { log } from './log'
 import { preferHighPerformanceGpu, raisePriority, useHighPerformancePlan } from './sysboost'
 import { applyClayTextures } from './nvidia'
+import { applyIniEdits } from './ueconfig'
 
 interface RunState {
   gameId: string
@@ -67,16 +68,22 @@ export function parseArgs(input: string): string[] {
 /** Names of all running processes (lower-cased image names). Works for elevated processes too. */
 function runningImageNames(): Promise<Set<string>> {
   return new Promise((resolve) => {
-    execFile('tasklist', ['/FO', 'CSV', '/NH'], { windowsHide: true, maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => {
-      const names = new Set<string>()
-      if (!err) {
-        for (const line of stdout.split(/\r?\n/)) {
-          const m = /^"([^"]+)"/.exec(line)
-          if (m) names.add(m[1]!.toLowerCase())
+    try {
+      execFile('tasklist', ['/FO', 'CSV', '/NH'], { windowsHide: true, maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => {
+        const names = new Set<string>()
+        if (!err) {
+          for (const line of stdout.split(/\r?\n/)) {
+            const m = /^"([^"]+)"/.exec(line)
+            if (m) names.add(m[1]!.toLowerCase())
+          }
         }
-      }
-      resolve(names)
-    })
+        resolve(names)
+      })
+    } catch (err) {
+      // Windows refused to start tasklist (rare); treat as "nothing seen" and try again next poll.
+      log.warn('Could not list processes', (err as Error).message)
+      resolve(new Set())
+    }
   })
 }
 
@@ -366,6 +373,13 @@ export class GameLauncher extends EventEmitter<LauncherEvents> {
     if (plan.powerPlan) {
       const release = useHighPerformancePlan()
       if (release) state.undo.push(release)
+    }
+    if (plan.settingsFile && plan.settingsEdits.length) {
+      try {
+        state.undo.push(applyIniEdits(plan.settingsFile, plan.settingsEdits))
+      } catch (err) {
+        this.emit('error', { gameId: game.id, title: game.title, message: `Potato settings couldn't be written: ${(err as Error).message}. The game starts with its own settings.` })
+      }
     }
     if (plan.driverLodBias !== null && plan.driverExe) {
       try {

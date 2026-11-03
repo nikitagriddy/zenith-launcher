@@ -1,5 +1,6 @@
 // Launch modes: what Zenith changes for one play session (launch options, CPU priority, GPU, power plan).
 import path from 'node:path'
+import { findUserSettings, potatoEdits } from './ueconfig'
 import { SOURCE_LABELS, type Game, type GameEngine, type LaunchPlan, type LaunchProfileId, type Settings } from '@shared/types'
 
 const CLAY: Record<Settings['launch']['nvidiaTextures'], { value: number; name: string }> = {
@@ -64,7 +65,7 @@ function potatoTokens(engine: GameEngine, s: Settings['launch']): { tokens: stri
 /** `nvidia`: true / false when known, null while the first driver check is still running. */
 export function buildPlan(game: Game, profile: LaunchProfileId, settings: Settings, engine: GameEngine, nvidia: boolean | null = null): LaunchPlan {
   const s = settings.launch
-  const plan: LaunchPlan = { profile, tokens: [], priority: 'normal', gpu: false, powerPlan: false, driverLodBias: null, driverExe: '', engine, applies: [], limits: [], summary: '' }
+  const plan: LaunchPlan = { profile, tokens: [], priority: 'normal', gpu: false, powerPlan: false, driverLodBias: null, driverExe: '', settingsFile: '', settingsEdits: [], engine, applies: [], limits: [], summary: '' }
   const argsBlocked = NO_ARGS_SOURCES.has(game.source)
   const boost = () => {
     if (s.boostPriority) {
@@ -114,14 +115,41 @@ export function buildPlan(game: Game, profile: LaunchProfileId, settings: Settin
     } else if (clay.value && nvidia === false) {
       plan.limits.push('Clay textures need an NVIDIA graphics card.')
     }
-    const driverNote = plan.driverLodBias ? 'only textures are lowered, through the NVIDIA driver' : 'in-game graphics stay as they are'
+    // Unreal games: the game's own settings file (what its Graphics menu saves), set back after the session.
+    const settingsFile = engine.id === 'unreal' ? findUserSettings(engine.realExe) : null
+    if (settingsFile) {
+      try {
+        const res = resolution(s)
+        plan.settingsEdits = potatoEdits(settingsFile, {
+          renderScale: Math.round(s.potatoRenderScale),
+          resolution: res,
+          fortnite: /fortniteclient/i.test(engine.realExe ?? '')
+        })
+        plan.settingsFile = settingsFile
+        plan.applies.push(
+          `Game settings: lowest graphics, ${Math.round(s.potatoRenderScale)}% 3D resolution${res ? `, ${res[0]}×${res[1]} fullscreen` : ''} (your settings come back when the game closes)`
+        )
+      } catch {
+        /* unreadable settings file: fall back to launch options only */
+      }
+    } else if (engine.id === 'unreal' && argsBlocked) {
+      plan.limits.push('Start the game once normally so its settings file exists; Potato can use it next time.')
+    }
+    const driverNote = plan.settingsEdits.length
+      ? 'Zenith uses the game’s settings file instead'
+      : plan.driverLodBias
+        ? 'only textures are lowered, through the NVIDIA driver'
+        : 'in-game graphics stay as they are'
     if (argsBlocked && p.tokens.length) {
-      plan.limits.push(`${SOURCE_LABELS[game.source]} doesn't accept launch options, so ${driverNote}.`)
+      if (!plan.settingsEdits.length) plan.limits.push(`${SOURCE_LABELS[game.source]} doesn't accept launch options, so ${driverNote}.`)
     } else if (engine.id === 'unknown') {
       plan.limits.push(`Engine not recognized, so ${driverNote}.`)
     } else {
       plan.tokens.push(...p.tokens)
-      plan.applies.push(...p.applies.map((a, i) => (i === 0 ? `${engine.label}: ${a.charAt(0).toLowerCase()}${a.slice(1)}` : a)))
+      // With the settings file in play, the launch options only back it up; don't list the same change twice.
+      if (!plan.settingsEdits.length) {
+        plan.applies.push(...p.applies.map((a, i) => (i === 0 ? `${engine.label}: ${a.charAt(0).toLowerCase()}${a.slice(1)}` : a)))
+      }
     }
     boost()
   }
@@ -129,7 +157,7 @@ export function buildPlan(game: Game, profile: LaunchProfileId, settings: Settin
   if (argsBlocked && profile === 'custom' && s.customArgs.trim()) {
     plan.limits.push(`${SOURCE_LABELS[game.source]} doesn't accept launch options.`)
   }
-  const graphics = plan.tokens.length > 0
+  const graphics = plan.tokens.length > 0 || plan.settingsEdits.length > 0
   const textures = plan.driverLodBias !== null
   plan.summary =
     profile === 'potato'

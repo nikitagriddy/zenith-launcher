@@ -44,12 +44,16 @@ function parse(stdout: string): Record<string, string> {
 
 function runAsync(args: string[]): Promise<Record<string, string>> {
   return new Promise((resolve, reject) => {
-    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script(), ...args], { windowsHide: true, timeout: 30_000 }, (err, stdout) => {
-      const r = parse(stdout ?? '')
-      if (r.error) return reject(new Error(r.error))
-      if (err) return reject(err)
-      resolve(r)
-    })
+    try {
+      execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script(), ...args], { windowsHide: true, timeout: 30_000 }, (err, stdout) => {
+        const r = parse(stdout ?? '')
+        if (r.error) return reject(new Error(r.error))
+        if (err) return reject(err)
+        resolve(r)
+      })
+    } catch (err) {
+      reject(err as Error)
+    }
   })
 }
 
