@@ -122,7 +122,7 @@ interface SteamItems {
  * Exact artwork URLs from the Steam store. Newer games keep their art under hashed paths
  * (…/apps/{id}/{hash}/library_capsule.jpg), so the classic fixed URLs 404 for them.
  */
-async function steamAssets(id: string): Promise<{ cover: string[]; hero: string[] }> {
+export async function steamAssets(id: string): Promise<{ cover: string[]; hero: string[] }> {
   const input = encodeURIComponent(
     JSON.stringify({ ids: [{ appid: Number(id) }], context: { language: 'english', country_code: 'US' }, data_request: { include_assets: true } })
   )

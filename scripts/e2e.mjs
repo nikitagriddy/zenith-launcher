@@ -61,7 +61,7 @@ await shot('01-onboarding')
 
 // Test-only: avoid window minimizing during launch, disable store detection.
 await api(
-  (f) => window.zenith.settings.set({ general: { minimizeOnLaunch: false }, library: { autoArtwork: false }, scanning: { folders: [f], detectSteam: false, detectEpic: false, detectGog: false, detectEa: false, detectUbisoft: false, detectBattlenet: false, detectRiot: false } }),
+  (f) => window.zenith.settings.set({ general: { minimizeOnLaunch: false }, discord: { enabled: false }, library: { autoArtwork: false }, scanning: { folders: [f], detectSteam: false, detectEpic: false, detectGog: false, detectEa: false, detectUbisoft: false, detectBattlenet: false, detectRiot: false } }),
   games
 )
 

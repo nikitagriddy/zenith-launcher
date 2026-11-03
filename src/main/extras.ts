@@ -33,7 +33,7 @@ const strip = (s: string) =>
     .trim()
 
 /** Steam app id for any game: its own id for Steam games, otherwise a cached store search by title. */
-async function steamAppIdFor(game: Game): Promise<string | null> {
+export async function steamAppIdFor(game: Game): Promise<string | null> {
   if (game.source === 'steam' && game.sourceId) return game.sourceId
   const key = `steam_appid:${game.id}:${game.title}`
   const cached = getMeta(key)

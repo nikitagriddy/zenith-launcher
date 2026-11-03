@@ -21,7 +21,8 @@ import { initMedia, mediaPath } from './media'
 import { initBackups, maybeAutoBackup } from './backup'
 import { GameLauncher } from './launcher'
 import { registerIpc } from './ipc'
-import { getSettings, listGames, markLaunched, recordSession, requireGame } from './repo'
+import { getGame, getSettings, listGames, markLaunched, recordSession, requireGame } from './repo'
+import { discord } from './discord'
 import { importCandidates, runScan } from './library'
 import { fetchAllArtwork } from './artwork'
 import { applyUpdateSettings, initUpdater, notifyBusyChanged } from './updater'
@@ -136,6 +137,7 @@ function createWindow(): void {
     else mainWindow?.show()
   })
 
+  for (const ev of ['show', 'hide', 'minimize', 'restore'] as const) mainWindow.on(ev as 'show', updateBrowsing)
   mainWindow.on('maximize', () => send('win:maximized', true))
   mainWindow.on('unmaximize', () => send('win:maximized', false))
   mainWindow.on('resize', debounce(saveWinState, 400))
@@ -239,9 +241,22 @@ async function launchGame(id: string): Promise<void> {
   if (s.general.minimizeOnLaunch && mainWindow?.isVisible()) mainWindow.minimize()
 }
 
+function updatePresence(): void {
+  // Prefer a game whose process is confirmed; fall back to one that's still starting.
+  const list = launcher.list()
+  const r = list.find((x) => x.tracking === 'process') ?? list[0]
+  const game = r ? getGame(r.gameId) : undefined
+  discord.setPlaying(game && r ? { game, startedAt: r.startedAt } : null)
+}
+
+function updateBrowsing(): void {
+  discord.setBrowsing(!!mainWindow && mainWindow.isVisible() && !mainWindow.isMinimized())
+}
+
 launcher.on('changed', () => {
   send('running:changed', launcher.list())
   refreshTray()
+  updatePresence()
 })
 launcher.on('started', (g) => toast({ kind: 'success', title: `Launching ${g.title}`, message: 'Have fun! Playtime is being tracked.' }))
 launcher.on('error', (e) => toast({ kind: 'error', title: e.title, message: e.message }))
@@ -359,6 +374,7 @@ function onSettingsChanged(prev: Settings, next: Settings): void {
   }
   if (prev.scanning.autoScanIntervalMin !== next.scanning.autoScanIntervalMin) scheduleAutoScan(next)
   if (JSON.stringify(prev.updates) !== JSON.stringify(next.updates)) applyUpdateSettings(next.updates)
+  if (JSON.stringify(prev.discord) !== JSON.stringify(next.discord)) discord.configure(next.discord)
   if (!prev.library.autoArtwork && next.library.autoArtwork) queueArtwork()
   send('settings:changed', next)
 }
@@ -441,12 +457,17 @@ app.whenReady().then(async () => {
     s.updates
   )
   launcher.on('changed', notifyBusyChanged)
+
+  discord.init((st) => send('discord:status', st))
+  discord.configure(s.discord)
+  updateBrowsing()
   if (s.scanning.autoScanOnStartup) setTimeout(() => void autoScan(), 4000)
 })
 
 app.on('before-quit', () => {
   quitting = true
   launcher.finishAll()
+  discord.shutdown()
 })
 
 app.on('will-quit', () => {

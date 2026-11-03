@@ -21,6 +21,15 @@ export const DEFAULT_SETTINGS: Settings = {
     globalHotkey: 'Control+Alt+Z',
     showNotifications: true
   },
+  discord: {
+    enabled: true,
+    clientId: '',
+    showElapsed: true,
+    showPlaytime: true,
+    showStore: true,
+    showButton: true,
+    showBrowsing: false
+  },
   updates: {
     autoCheck: true,
     intervalHours: 6,

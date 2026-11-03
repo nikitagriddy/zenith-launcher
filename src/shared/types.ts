@@ -162,6 +162,13 @@ export interface FreeDealsResult {
   errors: string[]
 }
 
+export interface DiscordStatus {
+  state: 'off' | 'waiting' | 'connected' | 'playing' | 'error'
+  user?: string
+  game?: string
+  message?: string
+}
+
 export interface RunningInfo {
   gameId: string
   startedAt: number
@@ -226,6 +233,16 @@ export interface Settings {
     closeToTray: boolean
     globalHotkey: string
     showNotifications: boolean
+  }
+  discord: {
+    enabled: boolean
+    /** Empty = Zenith's own Discord application. */
+    clientId: string
+    showElapsed: boolean
+    showPlaytime: boolean
+    showStore: boolean
+    showButton: boolean
+    showBrowsing: boolean
   }
   updates: {
     autoCheck: boolean
@@ -303,6 +320,7 @@ export type MainEvent =
   | 'data:restored'
   | 'art:progress'
   | 'update:status'
+  | 'discord:status'
 
 export interface ToastPayload {
   kind: 'info' | 'success' | 'error'
@@ -370,6 +388,9 @@ export interface ZenithApi {
   }
   deals: {
     list(force?: boolean): Promise<FreeDealsResult>
+  }
+  discord: {
+    status(): Promise<DiscordStatus>
   }
   art: {
     fetch(gameId: string): Promise<boolean>

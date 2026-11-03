@@ -20,7 +20,7 @@ import {
   Upload,
   X
 } from 'lucide-react'
-import type { AppInfo, ArtworkProgress, BackgroundType, BackupEntry, Category, StorageInfo, ThemeName, UpdateInstallMode, UpdateStatus } from '@shared/types'
+import type { AppInfo, ArtworkProgress, BackgroundType, BackupEntry, Category, DiscordStatus, StorageInfo, ThemeName, UpdateInstallMode, UpdateStatus } from '@shared/types'
 import { ACCENT_PRESETS } from '@shared/settings'
 import { api } from '../lib/api'
 import { useStore, type SettingsTab } from '../lib/store'
@@ -130,7 +130,72 @@ function GeneralTab() {
           <HotkeyRecorder value={g.globalHotkey} onChange={(v) => set({ globalHotkey: v })} />
         </SettingRow>
       </Card>
+      <DiscordCard />
     </>
+  )
+}
+
+function DiscordCard() {
+  const d = useStore((s) => s.settings.discord)
+  const update = useStore((s) => s.updateSettings)
+  const [st, setSt] = useState<DiscordStatus | null>(null)
+  const [id, setId] = useState(d.clientId)
+  useEffect(() => setId(d.clientId), [d.clientId])
+  useEffect(() => {
+    void api.discord.status().then(setSt, () => undefined)
+    return api.on('discord:status', (x: DiscordStatus) => setSt(x))
+  }, [])
+  const set = (patch: Partial<typeof d>) => void update({ discord: patch })
+  const line =
+    !st || st.state === 'off'
+      ? 'Off'
+      : st.state === 'playing'
+        ? `Showing “${st.game}” on ${st.user ?? 'your'} profile`
+        : st.state === 'connected'
+          ? `Connected${st.user ? ` as ${st.user}` : ''} · shows when you play`
+          : st.state === 'waiting'
+            ? `${st.message ?? 'Waiting for Discord'} · retrying`
+            : (st.message ?? 'Something went wrong')
+  const dot = st?.state === 'playing' || st?.state === 'connected' ? 'bg-emerald-400' : st?.state === 'error' ? 'bg-red-400' : 'bg-line/30'
+  return (
+    <Card title="Discord" description="Show what you're playing on your Discord profile while Discord is open on this PC.">
+      <SettingRow
+        title="Rich presence"
+        description={
+          <span className="flex items-center gap-2">
+            <span className={cx('h-2 w-2 rounded-full', dot, st?.state === 'playing' && 'animate-pulse')} />
+            {line}
+          </span>
+        }
+      >
+        <Toggle checked={d.enabled} onChange={(v) => set({ enabled: v })} />
+      </SettingRow>
+      <SettingRow title="Show time elapsed" description="The “12:34 elapsed” timer under your status.">
+        <Toggle checked={d.showElapsed} disabled={!d.enabled} onChange={(v) => set({ showElapsed: v })} />
+      </SettingRow>
+      <SettingRow title="Show total hours" description="Adds “120h played” once you have an hour or more.">
+        <Toggle checked={d.showPlaytime} disabled={!d.enabled} onChange={(v) => set({ showPlaytime: v })} />
+      </SettingRow>
+      <SettingRow title="Show the store" description="Adds “on Steam”, “on Epic Games”…">
+        <Toggle checked={d.showStore} disabled={!d.enabled} onChange={(v) => set({ showStore: v })} />
+      </SettingRow>
+      <SettingRow title="“Get Zenith” button" description="Lets friends download Zenith from your profile.">
+        <Toggle checked={d.showButton} disabled={!d.enabled} onChange={(v) => set({ showButton: v })} />
+      </SettingRow>
+      <SettingRow title="Show while browsing" description="“Browsing the library” when Zenith is open and you're not playing.">
+        <Toggle checked={d.showBrowsing} disabled={!d.enabled} onChange={(v) => set({ showBrowsing: v })} />
+      </SettingRow>
+      <SettingRow title="Custom Application ID" description="Optional. Use your own Discord app so your status shows its name instead of “Zenith”.">
+        <input
+          className="input h-9 w-56 font-mono text-xs"
+          value={id}
+          placeholder="Zenith (default)"
+          onChange={(e) => setId(e.target.value.replace(/\D/g, ''))}
+          onBlur={() => id !== d.clientId && set({ clientId: id })}
+          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+        />
+      </SettingRow>
+    </Card>
   )
 }
 

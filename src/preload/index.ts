@@ -79,6 +79,9 @@ const api: ZenithApi = {
   deals: {
     list: (force) => invoke('deals:list', force)
   },
+  discord: {
+    status: () => invoke('discord:status')
+  },
   art: {
     fetch: (id) => invoke('art:fetch', id),
     fetchAll: () => invoke('art:fetchAll')
