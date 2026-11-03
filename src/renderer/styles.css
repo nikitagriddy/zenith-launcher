@@ -1,0 +1,324 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Zenith "Observatory" design language.
+ * Ink-black sky, warm bone text, a single hot signal accent, hairlines and instrument readouts.
+ */
+:root,
+[data-theme='dark'] {
+  --bg: 6 8 12;
+  --surface: 13 16 23;
+  --elevated: 21 25 35;
+  --line: 233 226 211;
+  --fg: 237 231 219;
+  --muted: 140 136 126;
+  --accent: 255 107 44;
+  --accent-2: 255 179 64;
+  --on-accent: 18 10 4;
+  --star: 255 248 235;
+  color-scheme: dark;
+}
+[data-theme='midnight'] {
+  --bg: 0 0 0;
+  --surface: 9 9 11;
+  --elevated: 18 18 21;
+  --line: 236 232 224;
+  --fg: 240 237 230;
+  --muted: 128 126 120;
+  --star: 255 255 255;
+  color-scheme: dark;
+}
+[data-theme='slate'] {
+  --bg: 13 17 27;
+  --surface: 21 27 41;
+  --elevated: 30 38 56;
+  --line: 205 214 236;
+  --fg: 230 234 243;
+  --muted: 140 151 175;
+  --star: 220 230 255;
+  color-scheme: dark;
+}
+[data-theme='light'] {
+  --bg: 239 235 227;
+  --surface: 250 248 243;
+  --elevated: 232 227 217;
+  --line: 34 29 22;
+  --fg: 25 22 18;
+  --muted: 108 101 90;
+  --star: 120 100 70;
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  @apply bg-bg font-sans text-fg antialiased;
+  overflow: hidden;
+  user-select: none;
+  font-feature-settings: 'ss01', 'cv11';
+}
+/* Film grain over everything: keeps the dark surfaces from looking flat and digital. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 200;
+  opacity: 0.07;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.no-grain body::after,
+html.no-grain body::after {
+  display: none;
+}
+input,
+textarea,
+[contenteditable] {
+  user-select: text;
+}
+::selection {
+  background: rgb(var(--accent) / 0.35);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--line) / 0.1);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--line) / 0.2);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.drag {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+@layer components {
+  .glass {
+    background: rgb(var(--surface) / 0.58);
+    border: 1px solid rgb(var(--line) / 0.08);
+    backdrop-filter: blur(24px) saturate(140%);
+    box-shadow: inset 0 1px 0 rgb(var(--line) / 0.05);
+  }
+  .no-glass .glass {
+    background: rgb(var(--surface));
+    backdrop-filter: none;
+  }
+  .panel {
+    @apply rounded-2xl border border-line/[0.08] bg-surface/60;
+    box-shadow: inset 0 1px 0 rgb(var(--line) / 0.04);
+  }
+  .no-glass .panel {
+    @apply bg-surface;
+  }
+
+  /* Instrument readout label: tiny mono caps with wide tracking. */
+  .readout {
+    @apply font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-muted;
+  }
+  .num {
+    @apply font-mono tabular-nums;
+  }
+
+  .btn {
+    @apply inline-flex h-9 select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg px-4 text-sm font-semibold transition-all duration-150 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-on-accent;
+    box-shadow: 0 0 0 1px rgb(var(--accent) / 0.4), 0 10px 28px -12px rgb(var(--accent) / 0.9), inset 0 1px 0 rgb(255 255 255 / 0.28);
+  }
+  .btn-primary:hover {
+    filter: brightness(1.08);
+    box-shadow: 0 0 0 1px rgb(var(--accent) / 0.6), 0 14px 36px -10px rgb(var(--accent)), inset 0 1px 0 rgb(255 255 255 / 0.32);
+  }
+  .btn-ghost {
+    @apply btn border border-line/[0.1] bg-line/[0.04] text-fg hover:border-line/20 hover:bg-line/[0.08];
+  }
+  .btn-danger {
+    @apply btn border border-red-500/25 bg-red-500/10 text-red-400 hover:bg-red-500/20;
+  }
+  .btn-icon {
+    @apply inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted transition-colors hover:bg-line/[0.07] hover:text-fg active:scale-95;
+  }
+  .input {
+    @apply h-10 w-full rounded-lg border border-line/[0.12] bg-bg/70 px-3 text-sm text-fg outline-none transition-colors placeholder:text-muted/60 focus:border-accent/70 focus:ring-2 focus:ring-accent/20;
+  }
+  .label {
+    @apply readout mb-2 block;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-md border border-line/[0.1] bg-line/[0.04] px-2 py-0.5 text-xs font-medium text-fg/90;
+  }
+  .section-title {
+    @apply font-display text-[15px] font-semibold uppercase tracking-[0.06em] text-fg;
+  }
+  .display {
+    @apply font-display font-bold tracking-[-0.02em];
+  }
+  .skeleton {
+    background: linear-gradient(90deg, rgb(var(--line) / 0.03), rgb(var(--line) / 0.08), rgb(var(--line) / 0.03));
+    background-size: 200% 100%;
+    @apply animate-shimmer;
+  }
+  /* Hairline frame with corner ticks, like a viewfinder. */
+  .ticks {
+    position: relative;
+  }
+  .ticks::before,
+  .ticks::after {
+    content: '';
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    pointer-events: none;
+    border-color: rgb(var(--accent) / 0.8);
+  }
+  .ticks::before {
+    top: -1px;
+    left: -1px;
+    border-top: 1px solid;
+    border-left: 1px solid;
+  }
+  .ticks::after {
+    bottom: -1px;
+    right: -1px;
+    border-bottom: 1px solid;
+    border-right: 1px solid;
+  }
+  .stagger > * {
+    @apply animate-page-in;
+  }
+}
+
+/* Staggered reveal for shelves and grids (capped so long lists don't crawl in). */
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 35ms; }
+.stagger > *:nth-child(3) { animation-delay: 70ms; }
+.stagger > *:nth-child(4) { animation-delay: 105ms; }
+.stagger > *:nth-child(5) { animation-delay: 140ms; }
+.stagger > *:nth-child(6) { animation-delay: 175ms; }
+.stagger > *:nth-child(7) { animation-delay: 210ms; }
+.stagger > *:nth-child(8) { animation-delay: 245ms; }
+.stagger > *:nth-child(n + 9) { animation-delay: 280ms; }
+
+input[type='range'].range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    rgb(var(--accent)) 0%,
+    rgb(var(--accent)) var(--pct, 50%),
+    rgb(var(--line) / 0.12) var(--pct, 50%)
+  );
+  outline: none;
+  cursor: pointer;
+}
+input[type='range'].range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: rgb(var(--fg));
+  box-shadow: 0 0 0 4px rgb(var(--accent) / 0.25), 0 2px 6px rgb(0 0 0 / 0.5);
+  transform: rotate(45deg);
+  transition: box-shadow 0.15s;
+}
+input[type='range'].range::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 0 6px rgb(var(--accent) / 0.3), 0 2px 6px rgb(0 0 0 / 0.5);
+}
+
+select.input {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238c887e' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+select.input option {
+  background: rgb(var(--surface));
+  color: rgb(var(--fg));
+}
+
+.game-card .cover-img {
+  transition: transform 600ms cubic-bezier(0.2, 0.8, 0.2, 1), filter 300ms;
+}
+.game-card:hover .cover-img {
+  transform: scale(1.05);
+}
+.game-card .card-shine {
+  background: linear-gradient(115deg, transparent 30%, rgb(255 255 255 / 0.12) 48%, transparent 62%);
+  transform: translateX(-120%);
+  transition: transform 800ms ease;
+}
+.game-card:hover .card-shine {
+  transform: translateX(120%);
+}
+
+@keyframes grow {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+/* Star field for the "observatory" backdrop. */
+.starfield {
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, rgb(var(--star) / 0.7), transparent 60%),
+    radial-gradient(1px 1px at 27% 62%, rgb(var(--star) / 0.45), transparent 60%),
+    radial-gradient(1.5px 1.5px at 41% 31%, rgb(var(--star) / 0.8), transparent 60%),
+    radial-gradient(1px 1px at 55% 12%, rgb(var(--star) / 0.5), transparent 60%),
+    radial-gradient(1px 1px at 63% 48%, rgb(var(--star) / 0.35), transparent 60%),
+    radial-gradient(1.5px 1.5px at 74% 22%, rgb(var(--star) / 0.65), transparent 60%),
+    radial-gradient(1px 1px at 86% 58%, rgb(var(--star) / 0.45), transparent 60%),
+    radial-gradient(1px 1px at 92% 9%, rgb(var(--star) / 0.6), transparent 60%),
+    radial-gradient(1px 1px at 8% 82%, rgb(var(--star) / 0.3), transparent 60%),
+    radial-gradient(1px 1px at 35% 88%, rgb(var(--star) / 0.3), transparent 60%),
+    radial-gradient(1px 1px at 69% 79%, rgb(var(--star) / 0.3), transparent 60%),
+    radial-gradient(1.5px 1.5px at 18% 41%, rgb(var(--star) / 0.5), transparent 60%);
+  background-size: 640px 520px;
+}
+
+.no-anim *,
+.no-anim *::before,
+.no-anim *::after {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

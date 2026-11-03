@@ -1,0 +1,27 @@
+appId: com.zenith.launcher
+productName: Zenith
+copyright: Copyright (c) 2026 Zenith
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**/*
+  - resources/**/*
+  - package.json
+asar: true
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+  artifactName: Zenith-Setup-${version}.${ext}
+  executableName: Zenith
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Zenith
+  uninstallDisplayName: Zenith Game Launcher
+  deleteAppDataOnUninstall: false
