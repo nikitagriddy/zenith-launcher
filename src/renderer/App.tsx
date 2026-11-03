@@ -9,7 +9,7 @@ import { Sidebar } from './components/Sidebar'
 import { ConfirmDialog, ContextMenu, Toasts } from './components/Overlays'
 import { GameEditor } from './components/GameEditor'
 import { ScanModal } from './components/ScanModal'
-import { LogoMark } from './components/Logo'
+import { LogoMark, Wordmark } from './components/Logo'
 import { HomePage } from './pages/Home'
 import { LibraryPage } from './pages/Library'
 import { GameDetailsPage } from './pages/GameDetails'
@@ -23,7 +23,7 @@ function Splash({ error }: { error: string | null }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-5 bg-bg">
       <LogoMark size={64} className={error ? '' : 'animate-pulse'} />
-      <div className="font-display text-sm font-bold tracking-[0.4em]">ZENITH</div>
+      <Wordmark size={22} mark={false} />
       {error && (
         <div className="max-w-md text-center text-sm text-red-400">
           Could not load your library: {error}

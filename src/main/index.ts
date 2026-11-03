@@ -185,8 +185,12 @@ function debounce<T extends (...a: never[]) => void>(fn: T, ms: number): T {
 // ---------- tray ----------
 
 function trayImage(): Electron.NativeImage {
-  const img = nativeImage.createFromPath(resourcePath('icon.png'))
-  return img.isEmpty() ? img : img.resize({ width: 16, height: 16, quality: 'best' })
+  const big = nativeImage.createFromPath(resourcePath('tray.png'))
+  if (big.isEmpty()) return nativeImage.createFromPath(resourcePath('icon.png')).resize({ width: 16, height: 16, quality: 'best' })
+  // 16px for normal screens, the 32px render for 200% scaling.
+  const img = big.resize({ width: 16, height: 16, quality: 'best' })
+  img.addRepresentation({ scaleFactor: 2, width: 32, height: 32, buffer: big.toPNG() })
+  return img
 }
 
 function refreshTray(): void {

@@ -26,7 +26,7 @@ import { api } from '../lib/api'
 import { useStore, type SettingsTab } from '../lib/store'
 import { cx, formatBytes, formatDateTime } from '../lib/format'
 import { Segmented, Select, SettingRow, Slider, Toggle } from '../components/controls'
-import { LogoMark } from '../components/Logo'
+import { LogoMark, Wordmark } from '../components/Logo'
 import { useUpdateStatus } from '../lib/hooks'
 
 const TABS: { id: SettingsTab; label: string; icon: typeof Info }[] = [
@@ -1054,7 +1054,9 @@ function AboutTab() {
       <div className="absolute -right-20 -top-28 h-80 w-80 rounded-full border border-accent/20" />
       <div className="relative">
         <LogoMark size={56} />
-        <div className="display mt-6 text-4xl tracking-[0.25em]">ZENITH</div>
+        <div className="mt-6">
+          <Wordmark size={44} mark={false} />
+        </div>
         <div className="readout mt-2">Game launcher · Version {info?.version ?? '…'}</div>
         <p className="mt-5 max-w-lg text-sm leading-relaxed text-fg/75">
           Every game you own, at its highest point. Zenith runs fully offline: your library, artwork, playtime and settings are stored locally on this PC.
