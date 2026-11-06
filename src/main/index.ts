@@ -19,6 +19,7 @@ import { buildPlan, resolveProfile } from './profiles'
 import { detectEngine } from './engine'
 import { hasNvidiaDriver, nvidiaShuttingDown, recoverClayTextures } from './nvidia'
 import { recoverIniEdits } from './ueconfig'
+import { recoverBoost } from './sysboost'
 import { closeDatabase, flushNow, openDatabase } from './db'
 import { initLog, log } from './log'
 import { initMedia, mediaPath } from './media'
@@ -435,6 +436,7 @@ app.whenReady().then(async () => {
   initBackups(dataDir)
   // Undo driver texture tweaks a crash may have left behind, then warm the NVIDIA check.
   recoverIniEdits()
+  recoverBoost()
   void recoverClayTextures().then(() => hasNvidiaDriver())
 
   protocol.handle('zenith-media', async (req) => {

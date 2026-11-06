@@ -27,7 +27,10 @@ const ini = join(iniDir, 'GameUserSettings.ini')
 const iniOriginal = [
   '[/Script/Starfall.StarfallUserSettings]', 'bMotionBlur=True', 'bShowGrass=True', 'ResolutionSizeX=1920', 'ResolutionSizeY=1080',
   'LastUserConfirmedResolutionSizeX=1920', 'LastUserConfirmedResolutionSizeY=1080', 'LastConfirmedFullscreenMode=1', 'PreferredFullscreenMode=1',
-  'FrameRateLimit=240.000000', 'DesiredScreenWidth=1920', 'DesiredScreenHeight=1080', '', '[ScalabilityGroups]', 'sg.ResolutionQuality=100',
+  'FrameRateLimit=240.000000', 'DesiredScreenWidth=1920', 'DesiredScreenHeight=1080',
+  // Fortnite keeps its own 3D resolution lines and rebuilds sg.ResolutionQuality from them at startup.
+  'TemporalSuperResolutionQuality=Recommended', 'PotentiallyUpscaledResolutionQuality=85.000000', 'NeverUpscaledResolutionQuality=75.000000', 'bUseDynamicResolution=True',
+  '', '[ScalabilityGroups]', 'sg.ResolutionQuality=100',
   'sg.ViewDistanceQuality=3', 'sg.AntiAliasingQuality=3', 'sg.ShadowQuality=3', 'sg.GlobalIlluminationQuality=3', 'sg.ReflectionQuality=3',
   'sg.PostProcessQuality=3', 'sg.TextureQuality=3', 'sg.EffectsQuality=3', 'sg.FoliageQuality=3', 'sg.ShadingQuality=3', '', '[ChatSettings]', 'Volume=0.5', ''
 ].join('\r\n')
@@ -74,6 +77,11 @@ const nvdrs = (...a) => {
   }
 }
 const lodBias = (exe) => /value\.0x00738E8F=custom:(\d+)/.exec(nvdrs('get', exe, '0x00738E8F'))?.[1] ?? null
+/** All four clay settings as "neg,lod,quality,tss" (the full set the driver needs in DirectX 10+ games). */
+const claySet = (exe) => {
+  const out = nvdrs('get', exe, '0x0019BB68', '0x00738E8F', '0x00CE2691', '0x10D48A85')
+  return ['0x0019BB68', '0x00738E8F', '0x00CE2691', '0x10D48A85'].map((id) => new RegExp('value\\.' + id + '=custom:(\\d+)').exec(out)?.[1] ?? '-').join(',')
+}
 const hasProfile = (exe) => !nvdrs('get', exe, '0x00738E8F').includes('profile=none')
 const launchApp = () => _electron.launch({ executablePath: require('electron'), args: ['.'], env: { ...process.env, ZENITH_USER_DATA: join(root, 'user'), LOCALAPPDATA: localApp } })
 
@@ -144,6 +152,12 @@ const line = cmdline('Starfall.exe')
 await p.waitForTimeout(3100)
 const clayDuring = lodBias('Starfall-Win64-Shipping.exe')
 check(iniVal('sg.ResolutionQuality') === '50' && iniVal('sg.ShadowQuality') === '0' && iniVal('ResolutionSizeX') === '1280' && iniVal('PreferredFullscreenMode') === '0' && iniVal('bMotionBlur') === 'False', 'settings file has Potato values while playing')
+check(
+  iniVal('NeverUpscaledResolutionQuality') === '50.000000' && iniVal('PotentiallyUpscaledResolutionQuality') === '50.000000' && iniVal('bUseDynamicResolution') === 'False' && iniVal('TemporalSuperResolutionQuality') === 'Recommended',
+  'Fortnite-style 3D resolution lines set to 50% too, dynamic resolution off'
+)
+const clayFull = claySet('Starfall-Win64-Shipping.exe')
+check(clayFull === '1,20,20,8', `all four clay driver settings on while playing (neg,lod,quality,tss = ${clayFull})`)
 check(iniVal('FrameRateLimit') === '240.000000' && iniVal('Volume') === '0.5' && readFileSync(ini, 'utf8').includes('\r\n'), 'other lines and Windows line endings left alone')
 // Simulate the player changing a setting in-game and the game saving a new line on exit.
 writeFileSync(ini, readFileSync(ini, 'utf8').replace('sg.TextureQuality=0', 'sg.TextureQuality=2').replace('Volume=0.5', 'Volume=0.5\r\nPushToTalk=True'))
@@ -161,6 +175,7 @@ check(saved.launchProfile === 'potato', '"Always launch this way" saved Potato f
 await new Promise((r) => setTimeout(r, 4000))
 check(!hasProfile('Starfall-Win64-Shipping.exe'), 'driver profile Zenith made is removed after the game closed')
 check(iniVal('sg.ResolutionQuality') === '100' && iniVal('ResolutionSizeX') === '1920' && iniVal('PreferredFullscreenMode') === '1' && iniVal('bMotionBlur') === 'True', 'your own settings are back after the game closed')
+check(iniVal('NeverUpscaledResolutionQuality') === '75.000000' && iniVal('PotentiallyUpscaledResolutionQuality') === '85.000000' && iniVal('bUseDynamicResolution') === 'True', 'Fortnite-style 3D resolution lines back to yours')
 check(iniVal('sg.TextureQuality') === '2' && iniVal('PushToTalk') === 'True', 'in-game changes made during the session are kept')
 await p.waitForTimeout(500)
 await p.screenshot({ path: join(shots, 'play-button.png') })
@@ -198,9 +213,9 @@ await (await app2.firstWindow()).waitForFunction(() => !!window.zenith)
 let cleaned = false
 for (let i = 0; i < 40 && !cleaned; i++) {
   await new Promise((r) => setTimeout(r, 500))
-  cleaned = !hasProfile('Starfall-Win64-Shipping.exe') && iniVal('sg.ResolutionQuality') === '100'
+  cleaned = !hasProfile('Starfall-Win64-Shipping.exe') && iniVal('sg.ResolutionQuality') === '100' && !gpuPref(join(ue, 'Starfall.exe'))
 }
-check(cleaned, 'next start puts back the driver setting and the settings file')
+check(cleaned, 'next start puts back the driver setting, the settings file and the GPU preference')
 await app2.close()
 console.log(bad ? `\n${bad} check(s) failed` : '\nAll launch-mode checks passed')
 process.exit(bad ? 1 : 0)

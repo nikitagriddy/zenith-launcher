@@ -11,11 +11,30 @@ import { log } from './log'
 
 /** Texture filtering - LOD Bias (DX). Driver units are 1/8 of a mip level. */
 const LOD_BIAS_DX = '0x00738E8F'
-/** Texture filtering - Driver controlled LOD bias: off, so the value above is used as-is. */
-const DRIVER_CONTROLLED_LOD = '0x00638E8F'
+/** Texture filtering - Negative LOD bias (1 = clamp, so the bias only ever goes towards blurrier). */
+const NEGATIVE_LOD = '0x0019BB68'
+/** Texture filtering - Quality. */
+const TEX_QUALITY = '0x00CE2691'
+/**
+ * Antialiasing - Transparency Supersampling. In DirectX 10/11/12 games the driver only applies the LOD bias
+ * above when this is set, so without it the bias does nothing.
+ */
+const TRANSPARENCY_SS = '0x10D48A85'
 const PENDING_KEY = 'nv_pending'
 
-export const CLAY_LEVELS = { smooth: 10, clay: 20, extreme: 69 } as const
+/**
+ * Driver values per level, matching the proven Fortnite presets: the competitive "fixed floor" family keeps
+ * floors and build pieces visible; extreme is full clay and can make some floors disappear.
+ */
+function presetFor(lodBias: number): [string, number][] {
+  const extreme = lodBias >= 40
+  return [
+    [NEGATIVE_LOD, 1],
+    [LOD_BIAS_DX, lodBias],
+    [TEX_QUALITY, extreme ? 0xfffffff6 : 20], // high quality / high performance
+    [TRANSPARENCY_SS, extreme ? 56 : 8]
+  ]
+}
 
 interface Pending {
   exe: string
@@ -119,11 +138,13 @@ function revert(p: Pending, sync: boolean): Promise<void> | void {
 
 /** Set clay textures for one exe. Returns an undo function. */
 export async function applyClayTextures(exe: string, value: number): Promise<() => void> {
-  const r = await runAsync(['apply', exe, `${LOD_BIAS_DX}=${value}`, `${DRIVER_CONTROLLED_LOD}=0`])
+  const preset = presetFor(value)
+  // One call: either every setting is saved or none is.
+  const r = await runAsync(['apply', exe, ...preset.map(([id, v]) => `${id}=${v}`)])
   const pending: Pending = {
     exe,
-    prev: [LOD_BIAS_DX, DRIVER_CONTROLLED_LOD].map((id) => `${id}=${r[`prev.${id}`] ?? 'none'}`),
-    createdProfile: r.profile === 'zenith' && r[`prev.${LOD_BIAS_DX}`] === 'none' && r[`prev.${DRIVER_CONTROLLED_LOD}`] === 'none'
+    prev: preset.map(([id]) => `${id}=${r[`prev.${id}`] ?? 'none'}`),
+    createdProfile: r.profile === 'zenith' && preset.every(([id]) => r[`prev.${id}`] === 'none')
   }
   writePending([...readPending().filter((x) => x.exe !== exe), pending])
   log.info(`NVIDIA clay textures on for ${exe} (LOD bias ${value / 8})`)

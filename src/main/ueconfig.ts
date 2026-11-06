@@ -124,6 +124,14 @@ export function potatoEdits(file: string, opts: { renderScale: number; resolutio
       ] as const) set(k, v)
     }
     for (const k of ['bMotionBlur', 'bShowGrass', 'bUseNanite', 'bEnableDLSSFrameGeneration']) set(k, 'False')
+    // Some games (Fortnite) keep their own 3D resolution lines and rebuild sg.ResolutionQuality from them at
+    // startup, and dynamic resolution would scale it back up. Set those too, in the game's own number format.
+    const r = sectionRange(lines, sec)!
+    for (let i = r[0] + 1; i < r[1]; i++) {
+      const m = /^([A-Za-z]*ResolutionQuality)=(-?\d+(?:\.(\d+))?)\s*$/.exec(lines[i]!)
+      if (m) edits.push({ section: sec, key: m[1]!, value: m[3] ? opts.renderScale.toFixed(m[3].length) : String(opts.renderScale) })
+    }
+    set('bUseDynamicResolution', 'False')
   }
   if (opts.fortnite) {
     // Fortnite's "Performance" rendering mode (a choice in its own Graphics menu).
