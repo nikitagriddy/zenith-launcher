@@ -278,8 +278,8 @@ export interface Settings {
     defaultProfile: LaunchProfileId
     potatoResolution: 'native' | '1600x900' | '1280x720' | '960x540'
     potatoRenderScale: number
-    /** NVIDIA cards only: flatten textures through the driver in Potato mode. */
-    nvidiaTextures: 'off' | 'smooth' | 'clay' | 'extreme'
+    /** NVIDIA cards only: texture LOD bias for Potato, in driver units (1/8 mip level); 0 = off. */
+    clayStrength: number
     boostPriority: boolean
     boostGpu: boolean
     boostPowerPlan: boolean

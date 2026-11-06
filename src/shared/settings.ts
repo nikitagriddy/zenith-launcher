@@ -25,7 +25,7 @@ export const DEFAULT_SETTINGS: Settings = {
     defaultProfile: 'default',
     potatoResolution: '1280x720',
     potatoRenderScale: 50,
-    nvidiaTextures: 'clay',
+    clayStrength: 10,
     boostPriority: true,
     boostGpu: true,
     boostPowerPlan: false,

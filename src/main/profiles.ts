@@ -3,13 +3,6 @@ import path from 'node:path'
 import { findUserSettings, potatoEdits } from './ueconfig'
 import { SOURCE_LABELS, type Game, type GameEngine, type LaunchPlan, type LaunchProfileId, type Settings } from '@shared/types'
 
-const CLAY: Record<Settings['launch']['nvidiaTextures'], { value: number; name: string }> = {
-  off: { value: 0, name: '' },
-  smooth: { value: 10, name: 'smooth' },
-  clay: { value: 20, name: 'clay' },
-  extreme: { value: 69, name: 'extreme clay' }
-}
-
 export const PROFILES: LaunchProfileId[] = ['default', 'boost', 'potato', 'custom']
 
 /** Stores whose games start through a URI or client that can't take launch options. */
@@ -106,13 +99,13 @@ export function buildPlan(game: Game, profile: LaunchProfileId, settings: Settin
     // Potato: the engine's lowest settings plus everything in Boost.
     const p = potatoTokens(engine, s)
     // Clay textures work through the NVIDIA driver, so they also cover games that can't take launch options.
-    const clay = CLAY[s.nvidiaTextures]
+    const clay = s.clayStrength
     const exe = path.basename(engine.realExe || game.exePath)
-    if (clay.value && nvidia && exe) {
-      plan.driverLodBias = clay.value
+    if (clay && nvidia && exe) {
+      plan.driverLodBias = clay
       plan.driverExe = exe
-      plan.applies.push(`NVIDIA driver: ${clay.name} textures for this game, removed when it closes`)
-    } else if (clay.value && nvidia === false) {
+      plan.applies.push(`NVIDIA driver: clay textures at +${clay / 8} for this game, removed when it closes`)
+    } else if (clay && nvidia === false) {
       plan.limits.push('Clay textures need an NVIDIA graphics card.')
     }
     // Unreal games: the game's own settings file (what its Graphics menu saves), set back after the session.

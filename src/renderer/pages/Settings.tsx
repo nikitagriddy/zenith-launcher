@@ -388,6 +388,9 @@ const ENGINE_ROWS: [string, string][] = [
   ['Anything else', 'Engine graphics stay as they are. On NVIDIA cards, clay textures and Boost still apply.']
 ]
 
+/** Clay strength stops in driver units (1/8 of a mip level): off, gentle, the default +1.25, up to extreme. */
+const CLAY_STEPS = [0, 4, 6, 8, 10, 12, 16, 20, 28, 40, 69]
+
 function LaunchTab() {
   const l = useStore((s) => s.settings.launch)
   const update = useStore((s) => s.updateSettings)
@@ -450,24 +453,24 @@ function LaunchTab() {
         </SettingRow>
         <SettingRow
           title="Clay textures (NVIDIA)"
-          description="Flattens surface detail through your NVIDIA driver, for this game only. Works for Epic games like Fortnite too."
+          description="Flattens surface detail through your NVIDIA driver, for this game only. Works for Epic games like Fortnite too. +1.25 keeps the ground smooth."
         >
-          <Select
-            className="h-9 w-48"
-            value={l.nvidiaTextures}
-            onChange={(v) => set({ nvidiaTextures: v })}
-            options={[
-              { value: 'off', label: 'Off' },
-              { value: 'smooth', label: 'Smooth (+1.25)' },
-              { value: 'clay', label: 'Clay (+2.5)' },
-              { value: 'extreme', label: 'Extreme clay (+8.6)' }
-            ]}
-          />
+          <div className="w-56">
+            <Slider
+              value={Math.max(0, CLAY_STEPS.findIndex((v) => v >= l.clayStrength))}
+              min={0}
+              max={CLAY_STEPS.length - 1}
+              onChange={(i) => set({ clayStrength: CLAY_STEPS[i]! })}
+              format={(i) => (CLAY_STEPS[i] ? `+${(CLAY_STEPS[i]! / 8).toFixed(2).replace(/0$/, '')}` : 'Off')}
+            />
+          </div>
         </SettingRow>
-        {l.nvidiaTextures === 'extreme' && (
+        {l.clayStrength > 16 && (
           <p className="mb-2 flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-300">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            Extreme clay can make floors and some surfaces disappear in games like Fortnite. Clay keeps them visible.
+            {l.clayStrength >= 40
+              ? 'This strong, floors and some surfaces can disappear in games like Fortnite.'
+              : 'Above +2 the ground can look like stairs, because grass and dirt borders get blocky. Go lower if it bothers you.'}
           </p>
         )}
         <div className="mb-3 rounded-xl border border-line/[0.08] bg-bg/40 p-4 text-xs leading-relaxed text-muted">

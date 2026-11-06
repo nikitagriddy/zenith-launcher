@@ -305,6 +305,11 @@ export function getSettings(): Settings {
   let stored: unknown = {}
   try {
     stored = row ? JSON.parse(row.value) : {}
+    // v1.0.13: clay levels became a strength value. Old "clay" (+2.5) made the ground look like stairs, so it moves to +1.25.
+    const launch = (stored as { launch?: Record<string, unknown> }).launch
+    if (launch && typeof launch.nvidiaTextures === 'string' && launch.clayStrength === undefined) {
+      launch.clayStrength = ({ off: 0, smooth: 10, clay: 10, extreme: 69 } as Record<string, number>)[launch.nvidiaTextures] ?? 10
+    }
   } catch {
     stored = {}
   }
@@ -326,7 +331,7 @@ export function saveSettings(patch: DeepPartial<Settings>): Settings {
   next.launch.potatoRenderScale = clamp(next.launch.potatoRenderScale, 25, 100)
   if (!['default', 'boost', 'potato', 'custom'].includes(next.launch.defaultProfile)) next.launch.defaultProfile = 'default'
   if (!['native', '1600x900', '1280x720', '960x540'].includes(next.launch.potatoResolution)) next.launch.potatoResolution = '1280x720'
-  if (!['off', 'smooth', 'clay', 'extreme'].includes(next.launch.nvidiaTextures)) next.launch.nvidiaTextures = 'clay'
+  next.launch.clayStrength = clamp(Math.round(next.launch.clayStrength), 0, 69)
   if (!['auto', 'quit', 'manual'].includes(next.updates.installMode)) next.updates.installMode = DEFAULT_SETTINGS.updates.installMode
   if (!/^#[0-9a-f]{6}$/i.test(next.appearance.accent)) next.appearance.accent = DEFAULT_SETTINGS.appearance.accent
   run("INSERT OR REPLACE INTO settings (key, value) VALUES ('app', ?)", [JSON.stringify(next)])

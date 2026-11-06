@@ -39,7 +39,7 @@ const iniVal = (key) => new RegExp('^' + key.replace('.', '\\.') + '=(.*)$', 'm'
 writeFileSync(join(unity, 'PixelDrift_Data', 'globalgamemanagers'), Buffer.concat([Buffer.alloc(20), Buffer.from('2022.3.10f1\0'), Buffer.alloc(200)]))
 
 // The fake game keeps running ~5 s and ignores whatever options follow "rem"; we read its real command line from Windows.
-const recorder = () => '/c ping -n 9 127.0.0.1>nul&rem'
+const recorder = () => '/c ping -n 16 127.0.0.1>nul&rem'
 const cmdline = (name) => {
   try {
     return execFileSync('powershell', ['-NoProfile', '-Command', `(Get-CimInstance Win32_Process -Filter "Name='${name}'" | Select-Object -First 1).CommandLine`]).toString().trim()
@@ -127,8 +127,8 @@ const plainPlans = await api((id) => window.zenith.games.launchPlans(id), plain.
 check(plainPlans.potato.tokens.length === 0 && plainPlans.potato.limits.some((l) => /not recognized/.test(l)), 'Unknown engine: honest "graphics stay as they are"')
 const epicPlans = await api((id) => window.zenith.games.launchPlans(id), epic.id)
 check(epicPlans.potato.tokens.length === 0 && epicPlans.potato.settingsEdits.length > 0 && epicPlans.potato.limits.length === 0, 'Epic game: no launch options, real Potato through its settings file')
-check(sfPlans.potato.driverLodBias === 20 && sfPlans.potato.driverExe === 'Starfall-Win64-Shipping.exe', 'Potato on NVIDIA: clay textures (+2.5) on the real game exe')
-check(epicPlans.potato.driverLodBias === 20, 'Epic game also gets clay textures through the driver')
+check(sfPlans.potato.driverLodBias === 10 && sfPlans.potato.driverExe === 'Starfall-Win64-Shipping.exe', 'Potato on NVIDIA: clay textures (+1.25 default) on the real game exe')
+check(epicPlans.potato.driverLodBias === 10, 'Epic game also gets clay textures through the driver')
 check(sfPlans.potato.settingsFile === ini && sfPlans.potato.applies.some((a) => /Game settings: lowest graphics, 50% 3D resolution, 1280×720 fullscreen/.test(a)), 'Unreal: Potato uses the game’s own settings file')
 check(sfPlans.boost.settingsEdits.length === 0 && sfPlans.default.settingsEdits.length === 0, 'Boost and Default never touch the settings file')
 check(sfPlans.boost.driverLodBias === null && sfPlans.default.driverLodBias === null, 'Boost and Default never touch the driver')
@@ -157,11 +157,11 @@ check(
   'Fortnite-style 3D resolution lines set to 50% too, dynamic resolution off'
 )
 const clayFull = claySet('Starfall-Win64-Shipping.exe')
-check(clayFull === '1,20,20,8', `all four clay driver settings on while playing (neg,lod,quality,tss = ${clayFull})`)
+check(clayFull === '1,10,20,8', `all four clay driver settings on while playing (neg,lod,quality,tss = ${clayFull})`)
 check(iniVal('FrameRateLimit') === '240.000000' && iniVal('Volume') === '0.5' && readFileSync(ini, 'utf8').includes('\r\n'), 'other lines and Windows line endings left alone')
 // Simulate the player changing a setting in-game and the game saving a new line on exit.
 writeFileSync(ini, readFileSync(ini, 'utf8').replace('sg.TextureQuality=0', 'sg.TextureQuality=2').replace('Volume=0.5', 'Volume=0.5\r\nPushToTalk=True'))
-check(clayDuring === '20', `NVIDIA driver profile has clay textures while playing (LOD bias value ${clayDuring})`)
+check(clayDuring === '10', `NVIDIA driver profile has clay textures while playing (LOD bias value ${clayDuring})`)
 check(priority('Starfall') === 'High', `Boosted game runs at High CPU priority (${priority('Starfall') || 'not found'})`)
 check(gpuPref(join(ue, 'Starfall.exe')) && gpuPref(join(ue, 'Starfall', 'Binaries', 'Win64', 'Starfall-Win64-Shipping.exe')), 'High-performance GPU set for the game and its real exe')
 await p.screenshot({ path: join(shots, 'running.png') })
@@ -197,7 +197,7 @@ await p.screenshot({ path: join(shots, 'settings.png'), fullPage: false })
 await api((id) => window.zenith.games.launch(id, 'potato'), sf.id)
 await until(async (id) => (await window.zenith.games.running()).some((r) => r.gameId === id), sf.id)
 await new Promise((r) => setTimeout(r, 1000))
-check(lodBias('Starfall-Win64-Shipping.exe') === '20' && iniVal('sg.ResolutionQuality') === '50', 'Potato on again for the crash test')
+check(lodBias('Starfall-Win64-Shipping.exe') === '10' && iniVal('sg.ResolutionQuality') === '50', 'Potato on again for the crash test')
 execFileSync('taskkill', ['/PID', String(app.process().pid), '/T', '/F'], { stdio: 'ignore' })
 // Let the killed instance's helper processes exit so the single-instance lock is free.
 for (let i = 0; i < 20; i++) {
@@ -207,7 +207,7 @@ for (let i = 0; i < 20; i++) {
     break
   } catch {}
 }
-check(lodBias('Starfall-Win64-Shipping.exe') === '20' && iniVal('sg.ResolutionQuality') === '50', 'after a crash the changes are still there (expected)')
+check(lodBias('Starfall-Win64-Shipping.exe') === '10' && iniVal('sg.ResolutionQuality') === '50', 'after a crash the changes are still there (expected)')
 const app2 = await launchApp()
 await (await app2.firstWindow()).waitForFunction(() => !!window.zenith)
 let cleaned = false
