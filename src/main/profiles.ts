@@ -32,10 +32,19 @@ function potatoTokens(engine: GameEngine, s: Settings['launch']): { tokens: stri
           (q) => `sg.${q}Quality 0`
         )
       ]
-      // Exact form Unreal parses: -ExecCmds="cmd 1,cmd 2" (the quotes must wrap only the value).
-      const tokens = [`-ExecCmds="${cmds.join(',')}"`]
-      if (res) tokens.push(`-ResX=${res[0]}`, `-ResY=${res[1]}`)
-      return { tokens, applies: [`Lowest graphics settings, ${scale}% render scale`, ...(resLine ? [resLine] : [])] }
+      const tokens: string[] = []
+      const applies: string[] = []
+      // Console commands at launch are the one option an anti-cheat could object to, so protected games skip them.
+      if (!engine.antiCheat) {
+        // Exact form Unreal parses: -ExecCmds="cmd 1,cmd 2" (the quotes must wrap only the value).
+        tokens.push(`-ExecCmds="${cmds.join(',')}"`)
+        applies.push(`Lowest graphics settings, ${scale}% render scale`)
+      }
+      if (res) {
+        tokens.push(`-ResX=${res[0]}`, `-ResY=${res[1]}`)
+        applies.push(resLine)
+      }
+      return { tokens, applies }
     }
     case 'unity': {
       const year = Number((engine.version ?? '').split('.')[0])
@@ -58,12 +67,18 @@ function potatoTokens(engine: GameEngine, s: Settings['launch']): { tokens: stri
 /** `nvidia`: true / false when known, null while the first driver check is still running. */
 export function buildPlan(game: Game, profile: LaunchProfileId, settings: Settings, engine: GameEngine, nvidia: boolean | null = null): LaunchPlan {
   const s = settings.launch
-  const plan: LaunchPlan = { profile, tokens: [], priority: 'normal', gpu: false, powerPlan: false, driverLodBias: null, driverExe: '', settingsFile: '', settingsEdits: [], engine, applies: [], limits: [], summary: '' }
+  const plan: LaunchPlan = { profile, tokens: [], priority: 'normal', gpu: false, powerPlan: false, driverTweak: 'none', driverLodBias: null, driverExe: '', settingsFile: '', settingsEdits: [], engine, applies: [], limits: [], summary: '' }
   const argsBlocked = NO_ARGS_SOURCES.has(game.source)
-  const boost = () => {
+  const exe = path.basename(engine.realExe || game.exePath)
+  const boost = (tweak: 'boost' | 'potato' = 'boost') => {
     if (s.boostPriority) {
-      plan.priority = 'high'
-      plan.applies.push('Top CPU priority for the game')
+      if (engine.antiCheat) {
+        // Changing priority means opening the running game's process, which is what anti-cheat watches for.
+        plan.limits.push(`Uses ${engine.antiCheat}, so Zenith leaves its CPU priority alone.`)
+      } else {
+        plan.priority = 'high'
+        plan.applies.push('Top CPU priority for the game')
+      }
     }
     if (s.boostGpu) {
       plan.gpu = true
@@ -72,6 +87,11 @@ export function buildPlan(game: Game, profile: LaunchProfileId, settings: Settin
     if (s.boostPowerPlan) {
       plan.powerPlan = true
       plan.applies.push('High performance power plan while you play')
+    }
+    if (s.boostNvidia && nvidia && exe) {
+      plan.driverTweak = tweak
+      plan.driverExe = exe
+      plan.applies.push(tweak === 'potato' ? 'NVIDIA: maximum performance and fastest texture filtering' : 'NVIDIA: maximum performance')
     }
   }
 
@@ -83,7 +103,7 @@ export function buildPlan(game: Game, profile: LaunchProfileId, settings: Settin
 
   if (profile === 'boost') {
     boost()
-    if (!plan.applies.length) plan.limits.push('All Boost options are turned off in Settings › Launch modes.')
+    if (!plan.applies.length && !plan.limits.length) plan.limits.push('All Boost options are turned off in Settings › Launch modes.')
     plan.summary = plan.applies.length ? 'Same graphics, more speed' : 'Nothing to change'
     return plan
   }
@@ -98,14 +118,13 @@ export function buildPlan(game: Game, profile: LaunchProfileId, settings: Settin
   } else {
     // Potato: the engine's lowest settings plus everything in Boost.
     const p = potatoTokens(engine, s)
-    // Clay textures work through the NVIDIA driver, so they also cover games that can't take launch options.
-    const clay = s.clayStrength
-    const exe = path.basename(engine.realExe || game.exePath)
-    if (clay && nvidia && exe) {
-      plan.driverLodBias = clay
+    // Clay textures are a hidden driver setting some online games ban for, so they only run after the user opted in.
+    if (s.clayEnabled && nvidia && exe) {
+      plan.driverLodBias = s.clayStrength
       plan.driverExe = exe
-      plan.applies.push(`NVIDIA driver: clay textures at +${clay / 8} for this game, removed when it closes`)
-    } else if (clay && nvidia === false) {
+      plan.applies.push(`NVIDIA driver: clay textures at +${s.clayStrength / 8} for this game, removed when it closes`)
+      plan.limits.push('Clay textures are on. They use a hidden NVIDIA setting some online games ban for.')
+    } else if (s.clayEnabled && nvidia === false) {
       plan.limits.push('Clay textures need an NVIDIA graphics card.')
     }
     // Unreal games: the game's own settings file (what its Graphics menu saves), set back after the session.
@@ -120,12 +139,12 @@ export function buildPlan(game: Game, profile: LaunchProfileId, settings: Settin
         })
         plan.settingsFile = settingsFile
         plan.applies.push(
-          `Game settings: lowest graphics, ${Math.round(s.potatoRenderScale)}% 3D resolution${res ? `, ${res[0]}×${res[1]} fullscreen` : ''} (your settings come back when the game closes)`
+          `Game settings: lowest graphics, ${Math.round(s.potatoRenderScale)}% 3D resolution${res ? `, ${res[0]}×${res[1]}` : ''}, fullscreen (your settings come back when the game closes)`
         )
       } catch {
         /* unreadable settings file: fall back to launch options only */
       }
-    } else if (engine.id === 'unreal' && argsBlocked) {
+    } else if (engine.id === 'unreal' && (argsBlocked || engine.antiCheat)) {
       plan.limits.push('Start the game once normally so its settings file exists; Potato can use it next time.')
     }
     const driverNote = plan.settingsEdits.length
@@ -144,7 +163,7 @@ export function buildPlan(game: Game, profile: LaunchProfileId, settings: Settin
         plan.applies.push(...p.applies.map((a, i) => (i === 0 ? `${engine.label}: ${a.charAt(0).toLowerCase()}${a.slice(1)}` : a)))
       }
     }
-    boost()
+    boost('potato')
   }
 
   if (argsBlocked && profile === 'custom' && s.customArgs.trim()) {

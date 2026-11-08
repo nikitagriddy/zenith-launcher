@@ -118,11 +118,11 @@ export function potatoEdits(file: string, opts: { renderScale: number; resolutio
       const [w, h] = opts.resolution.map(String) as [string, string]
       for (const [k, v] of [
         ['ResolutionSizeX', w], ['ResolutionSizeY', h], ['LastUserConfirmedResolutionSizeX', w], ['LastUserConfirmedResolutionSizeY', h],
-        ['DesiredScreenWidth', w], ['DesiredScreenHeight', h], ['LastUserConfirmedDesiredScreenWidth', w], ['LastUserConfirmedDesiredScreenHeight', h],
-        // A lower resolution only takes effect in real fullscreen (borderless always uses the desktop size).
-        ['FullscreenMode', '0'], ['PreferredFullscreenMode', '0'], ['LastConfirmedFullscreenMode', '0']
+        ['DesiredScreenWidth', w], ['DesiredScreenHeight', h], ['LastUserConfirmedDesiredScreenWidth', w], ['LastUserConfirmedDesiredScreenHeight', h]
       ] as const) set(k, v)
     }
+    // Real fullscreen: less work than borderless, and a lower resolution only takes effect there.
+    for (const k of ['FullscreenMode', 'PreferredFullscreenMode', 'LastConfirmedFullscreenMode']) set(k, '0')
     for (const k of ['bMotionBlur', 'bShowGrass', 'bUseNanite', 'bEnableDLSSFrameGeneration']) set(k, 'False')
     // Some games (Fortnite) keep their own 3D resolution lines and rebuild sg.ResolutionQuality from them at
     // startup, and dynamic resolution would scale it back up. Set those too, in the game's own number format.

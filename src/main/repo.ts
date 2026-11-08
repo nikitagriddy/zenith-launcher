@@ -305,16 +305,18 @@ export function getSettings(): Settings {
   let stored: unknown = {}
   try {
     stored = row ? JSON.parse(row.value) : {}
-    // v1.0.13: clay levels became a strength value. Old "clay" (+2.5) made the ground look like stairs, so it moves to +1.25.
-    const launch = (stored as { launch?: Record<string, unknown> }).launch
-    if (launch && typeof launch.nvidiaTextures === 'string' && launch.clayStrength === undefined) {
-      launch.clayStrength = ({ off: 0, smooth: 10, clay: 10, extreme: 69 } as Record<string, number>)[launch.nvidiaTextures] ?? 10
-    }
   } catch {
     stored = {}
   }
   cachedSettings = mergeSettings(DEFAULT_SETTINGS, stored)
+  clampLaunch(cachedSettings.launch)
   return cachedSettings
+}
+
+/** Keeps launch-mode values inside what Settings offers, including ones saved by older versions. */
+function clampLaunch(l: Settings['launch']): void {
+  l.potatoRenderScale = clamp(l.potatoRenderScale, 50, 100)
+  l.clayStrength = clamp(Math.round(l.clayStrength), 4, 20)
 }
 
 export function saveSettings(patch: DeepPartial<Settings>): Settings {
@@ -328,10 +330,9 @@ export function saveSettings(patch: DeepPartial<Settings>): Settings {
   next.data.keepBackups = clamp(next.data.keepBackups, 1, 50)
   next.updates.intervalHours = clamp(next.updates.intervalHours, 1, 168)
   if (next.discord.statusShows !== 'game') next.discord.statusShows = 'launcher'
-  next.launch.potatoRenderScale = clamp(next.launch.potatoRenderScale, 25, 100)
+  clampLaunch(next.launch)
   if (!['default', 'boost', 'potato', 'custom'].includes(next.launch.defaultProfile)) next.launch.defaultProfile = 'default'
-  if (!['native', '1600x900', '1280x720', '960x540'].includes(next.launch.potatoResolution)) next.launch.potatoResolution = '1280x720'
-  next.launch.clayStrength = clamp(Math.round(next.launch.clayStrength), 0, 69)
+  if (!['native', '1600x900', '1280x720', '960x540'].includes(next.launch.potatoResolution)) next.launch.potatoResolution = DEFAULT_SETTINGS.launch.potatoResolution
   if (!['auto', 'quit', 'manual'].includes(next.updates.installMode)) next.updates.installMode = DEFAULT_SETTINGS.updates.installMode
   if (!/^#[0-9a-f]{6}$/i.test(next.appearance.accent)) next.appearance.accent = DEFAULT_SETTINGS.appearance.accent
   run("INSERT OR REPLACE INTO settings (key, value) VALUES ('app', ?)", [JSON.stringify(next)])

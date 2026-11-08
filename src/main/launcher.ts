@@ -7,7 +7,7 @@ import type { Game, LaunchPlan, LaunchProfileId, RunningInfo } from '@shared/typ
 import { SYSTEM_PROCESS_NAMES, isDriveRoot, walkExes } from './exe'
 import { log } from './log'
 import { preferHighPerformanceGpu, raisePriority, useHighPerformancePlan } from './sysboost'
-import { applyClayTextures } from './nvidia'
+import { applyDriverSettings } from './nvidia'
 import { applyIniEdits } from './ueconfig'
 
 interface RunState {
@@ -381,11 +381,11 @@ export class GameLauncher extends EventEmitter<LauncherEvents> {
         this.emit('error', { gameId: game.id, title: game.title, message: `Potato settings couldn't be written: ${(err as Error).message}. The game starts with its own settings.` })
       }
     }
-    if (plan.driverLodBias !== null && plan.driverExe) {
+    if ((plan.driverTweak !== 'none' || plan.driverLodBias !== null) && plan.driverExe && !CLIENT_EXES.has(plan.driverExe.toLowerCase())) {
       try {
-        state.undo.push(await applyClayTextures(plan.driverExe, plan.driverLodBias))
+        state.undo.push(await applyDriverSettings(plan.driverExe, plan.driverTweak, plan.driverLodBias))
       } catch (err) {
-        this.emit('error', { gameId: game.id, title: game.title, message: `Clay textures couldn't be turned on: ${(err as Error).message}. The game starts normally.` })
+        this.emit('error', { gameId: game.id, title: game.title, message: `NVIDIA settings couldn't be applied: ${(err as Error).message}. The game starts normally.` })
       }
     }
   }

@@ -35,7 +35,7 @@ export function LaunchModePicker({ game, anchor, onClose }: { game: Game; anchor
     const top =
       r.bottom + 8 + h <= window.innerHeight ? r.bottom + 8 : r.top - h - 8 >= 8 ? r.top - h - 8 : Math.max(8, window.innerHeight - h - 8)
     setPos({ left: Math.min(Math.max(8, r.left), window.innerWidth - w - 8), top })
-  }, [anchor, plans, hover])
+  }, [anchor, plans])
 
   useEffect(() => {
     const down = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && !anchor.contains(e.target as Node) && onClose()
@@ -54,7 +54,6 @@ export function LaunchModePicker({ game, anchor, onClose }: { game: Game; anchor
     await launch(game.id, id)
   }
 
-  const plan = plans?.[hover]
   return createPortal(
     <div
       ref={ref}
@@ -101,25 +100,30 @@ export function LaunchModePicker({ game, anchor, onClose }: { game: Game; anchor
         })}
       </div>
       <div className="mt-2 border-t border-line/[0.07] bg-bg/40 px-4 py-3">
-        {!plan ? (
+        {!plans ? (
           <div className="flex items-center gap-2 text-xs text-muted">
             <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking what this game supports…
           </div>
         ) : (
-          <ul className="space-y-1">
-            {plan.applies.map((a) => (
-              <li key={a} className="flex gap-2 text-xs text-fg/85">
-                <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                {a}
-              </li>
+          // Every mode's list shares one grid cell, so the menu is always as tall as the longest and never moves under the mouse.
+          <div className="grid">
+            {MODES.map((m) => (
+              <ul key={m.id} className={cx('col-start-1 row-start-1 space-y-1', m.id !== hover && 'invisible')}>
+                {plans[m.id].applies.map((a) => (
+                  <li key={a} className="flex gap-2 text-xs text-fg/85">
+                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                    {a}
+                  </li>
+                ))}
+                {plans[m.id].limits.map((l) => (
+                  <li key={l} className="flex gap-2 text-xs text-amber-300/90">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    {l}
+                  </li>
+                ))}
+              </ul>
             ))}
-            {plan.limits.map((l) => (
-              <li key={l} className="flex gap-2 text-xs text-amber-300/90">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                {l}
-              </li>
-            ))}
-          </ul>
+          </div>
         )}
         <label className="mt-3 flex cursor-pointer items-center gap-2.5 text-xs text-muted">
           <Checkbox checked={remember} onChange={setRemember} />

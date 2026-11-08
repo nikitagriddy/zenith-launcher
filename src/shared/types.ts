@@ -56,6 +56,8 @@ export interface GameEngine {
   version?: string
   /** Unreal games: the real "<Game>-Win64-Shipping.exe" behind the launcher stub. */
   realExe?: string
+  /** Anti-cheat that ships with the game. Zenith stays out of these games while they run. */
+  antiCheat?: string
 }
 
 /** Everything a launch mode changes for one session, plus plain-language notes for the UI. */
@@ -66,7 +68,9 @@ export interface LaunchPlan {
   priority: 'normal' | 'high'
   gpu: boolean
   powerPlan: boolean
-  /** NVIDIA texture LOD bias for the session (driver units, 1/8 mip), or null. */
+  /** NVIDIA Control Panel options for the session: 'boost' = maximum performance, 'potato' = also fastest texture filtering. */
+  driverTweak: 'none' | 'boost' | 'potato'
+  /** Hidden NVIDIA texture LOD bias for the session (driver units, 1/8 mip), or null. Only after the user opted in. */
   driverLodBias: number | null
   /** Executable name the NVIDIA driver profile is matched on. */
   driverExe: string
@@ -278,11 +282,15 @@ export interface Settings {
     defaultProfile: LaunchProfileId
     potatoResolution: 'native' | '1600x900' | '1280x720' | '960x540'
     potatoRenderScale: number
-    /** NVIDIA cards only: texture LOD bias for Potato, in driver units (1/8 mip level); 0 = off. */
+    /** Opt-in: a hidden NVIDIA setting some online games ban for. */
+    clayEnabled: boolean
+    /** NVIDIA cards only: texture LOD bias for Potato, in driver units (1/8 mip level). */
     clayStrength: number
     boostPriority: boolean
     boostGpu: boolean
     boostPowerPlan: boolean
+    /** NVIDIA cards only: the Control Panel options "Prefer maximum performance" and, in Potato, "High performance" texture filtering. */
+    boostNvidia: boolean
     customArgs: string
     customBoost: boolean
   }

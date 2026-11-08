@@ -21,7 +21,7 @@ import {
   Upload,
   X
 } from 'lucide-react'
-import type { AppInfo, ArtworkProgress, BackgroundType, BackupEntry, Category, DiscordStatus, StorageInfo, ThemeName, UpdateInstallMode, UpdateStatus } from '@shared/types'
+import type { AppInfo, ArtworkProgress, BackgroundType, BackupEntry, Category, DiscordStatus, Settings, StorageInfo, ThemeName, UpdateInstallMode, UpdateStatus } from '@shared/types'
 import { ACCENT_PRESETS } from '@shared/settings'
 import { api } from '../lib/api'
 import { useStore, type SettingsTab } from '../lib/store'
@@ -381,22 +381,42 @@ function AppearanceTab() {
 // ---------------- Launch modes ----------------
 
 const ENGINE_ROWS: [string, string][] = [
-  ['Unreal Engine (Fortnite too)', 'The game’s own settings file: lowest settings, lower 3D resolution, lower resolution in fullscreen. Put back when the game closes. Plus -ExecCmds/-ResX where the store allows launch options.'],
+  ['Unreal Engine (Fortnite too)', 'The game’s own settings file: lowest settings, lower 3D resolution, fullscreen. Put back when the game closes. Plus launch options where the store allows them; games with anti-cheat only get the resolution ones.'],
   ['Unity', 'Lowest quality level (when the game uses Unity’s standard names) and resolution.'],
   ['Source and Source 2', 'Resolution.'],
   ['Godot', 'Resolution.'],
-  ['Anything else', 'Engine graphics stay as they are. On NVIDIA cards, clay textures and Boost still apply.']
+  ['Anything else', 'Engine graphics stay as they are. Boost still applies.']
 ]
 
-/** Clay strength stops in driver units (1/8 of a mip level): off, gentle, the default +1.25, up to extreme. */
-const CLAY_STEPS = [0, 4, 6, 8, 10, 12, 16, 20, 28, 40, 69]
+/** Clay strength stops in driver units (1/8 of a mip level). +1.25 is the default. */
+const CLAY_STEPS = [4, 6, 8, 10, 12, 16, 20]
+
+const POTATO_PRESETS: { name: string; note: string; resolution: Settings['launch']['potatoResolution']; scale: number }[] = [
+  { name: 'Sharp', note: 'Your resolution, 75% 3D', resolution: 'native', scale: 75 },
+  { name: 'Balanced', note: 'Your resolution, 60% 3D', resolution: 'native', scale: 60 },
+  { name: 'Max FPS', note: '1280 × 720, 50% 3D', resolution: '1280x720', scale: 50 }
+]
 
 function LaunchTab() {
   const l = useStore((s) => s.settings.launch)
   const update = useStore((s) => s.updateSettings)
+  const ask = useStore((s) => s.ask)
   const set = (patch: Partial<typeof l>) => void update({ launch: patch })
   const [args, setArgs] = useState(l.customArgs)
   useEffect(() => setArgs(l.customArgs), [l.customArgs])
+  const toggleClay = async (on: boolean) => {
+    if (on) {
+      const ok = await ask({
+        title: 'Turn on clay textures?',
+        message:
+          'This changes a hidden NVIDIA setting that isn’t in NVIDIA Control Panel. Some online games have banned players for it, and a game that allows it today can change its mind. If your account gets banned, Zenith can’t undo that. Don’t use it in tournaments.',
+        confirmLabel: 'Turn on at my own risk',
+        danger: true
+      })
+      if (!ok) return
+    }
+    set({ clayEnabled: on })
+  }
   return (
     <>
       <Card title="Default launch mode" description="What Play does for games that don't have their own mode. Pick another mode any time with the arrow next to Play.">
@@ -421,7 +441,7 @@ function LaunchTab() {
       </Card>
 
       <Card title="Boost" description="Used by Boost, Potato and (if you want) Custom. Everything is undone when the game closes.">
-        <SettingRow title="Top CPU priority" description="Windows gives the game's processes CPU time first.">
+        <SettingRow title="Top CPU priority" description="Windows gives the game's processes CPU time first. Skipped for games with anti-cheat, so Zenith never touches them while they run.">
           <Toggle checked={l.boostPriority} onChange={(v) => set({ boostPriority: v })} />
         </SettingRow>
         <SettingRow title="Use the high-performance GPU" description="On laptops with two graphics chips, forces the faster one (Windows Graphics setting for the game).">
@@ -430,9 +450,29 @@ function LaunchTab() {
         <SettingRow title="High performance power plan" description="Switches Windows to High performance while you play and back afterwards. Not every PC has this plan.">
           <Toggle checked={l.boostPowerPlan} onChange={(v) => set({ boostPowerPlan: v })} />
         </SettingRow>
+        <SettingRow title="NVIDIA performance settings" description="For this game only: Power management on Prefer maximum performance, and in Potato, Texture filtering on High performance. Both are options in NVIDIA Control Panel.">
+          <Toggle checked={l.boostNvidia} onChange={(v) => set({ boostNvidia: v })} />
+        </SettingRow>
       </Card>
 
-      <Card title="Potato" description="The lowest graphics and fewest pixels a game will take, for the most FPS. Everything is put back when the game closes, so the next normal launch looks like before.">
+      <Card title="Potato" description="The game's lowest graphics at the 3D resolution you pick. Everything is put back when the game closes, so the next normal launch looks like before.">
+        <div className="mb-1 mt-3 grid grid-cols-3 gap-2" role="radiogroup" aria-label="Potato preset">
+          {POTATO_PRESETS.map((p) => {
+            const on = l.potatoResolution === p.resolution && l.potatoRenderScale === p.scale
+            return (
+              <button
+                key={p.name}
+                role="radio"
+                aria-checked={on}
+                onClick={() => set({ potatoResolution: p.resolution, potatoRenderScale: p.scale })}
+                className={cx('rounded-xl border p-3 text-left transition-colors', on ? 'border-accent bg-accent/[0.08]' : 'border-line/[0.08] hover:border-line/20')}
+              >
+                <div className="text-sm font-semibold">{p.name}</div>
+                <div className="mt-0.5 text-xs leading-snug text-muted">{p.note}</div>
+              </button>
+            )
+          })}
+        </div>
         <SettingRow title="Resolution">
           <Select
             className="h-9 w-48"
@@ -448,37 +488,40 @@ function LaunchTab() {
         </SettingRow>
         <SettingRow title="3D resolution (Unreal Engine, Fortnite)" description="Draws the 3D world at this share of the screen resolution. The biggest FPS boost: lower is blurrier and faster.">
           <div className="w-56">
-            <Slider value={l.potatoRenderScale} min={25} max={100} step={5} onChange={(v) => set({ potatoRenderScale: v })} format={(v) => `${v}%`} />
+            <Slider value={l.potatoRenderScale} min={50} max={100} step={5} onChange={(v) => set({ potatoRenderScale: v })} format={(v) => `${v}%`} />
           </div>
         </SettingRow>
         <SettingRow
           title="Clay textures (NVIDIA)"
-          description="Flattens surface detail through your NVIDIA driver, for this game only. Works for Epic games like Fortnite too. +1.25 keeps the ground smooth."
+          description="Off unless you turn it on. Flattens surfaces through a hidden NVIDIA setting that some online games ban for."
         >
-          <div className="w-56">
-            <Slider
-              value={Math.max(0, CLAY_STEPS.findIndex((v) => v >= l.clayStrength))}
-              min={0}
-              max={CLAY_STEPS.length - 1}
-              onChange={(i) => set({ clayStrength: CLAY_STEPS[i]! })}
-              format={(i) => (CLAY_STEPS[i] ? `+${(CLAY_STEPS[i]! / 8).toFixed(2).replace(/0$/, '')}` : 'Off')}
-            />
-          </div>
+          <Toggle checked={l.clayEnabled} onChange={(v) => void toggleClay(v)} />
         </SettingRow>
-        {l.clayStrength > 16 && (
+        {l.clayEnabled && (
+          <SettingRow title="Clay strength" description="+1.25 keeps the ground smooth.">
+            <div className="w-56">
+              <Slider
+                value={Math.max(0, CLAY_STEPS.findIndex((v) => v >= l.clayStrength))}
+                min={0}
+                max={CLAY_STEPS.length - 1}
+                onChange={(i) => set({ clayStrength: CLAY_STEPS[i]! })}
+                format={(i) => `+${(CLAY_STEPS[i]! / 8).toFixed(2).replace(/0$/, '')}`}
+              />
+            </div>
+          </SettingRow>
+        )}
+        {l.clayEnabled && l.clayStrength > 16 && (
           <p className="mb-2 flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-300">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            {l.clayStrength >= 40
-              ? 'This strong, floors and some surfaces can disappear in games like Fortnite.'
-              : 'Above +2 the ground can look like stairs, because grass and dirt borders get blocky. Go lower if it bothers you.'}
+            Above +2 the ground can look like stairs, because grass and dirt borders get blocky. Go lower if it bothers you.
           </p>
         )}
         <div className="mb-3 rounded-xl border border-line/[0.08] bg-bg/40 p-4 text-xs leading-relaxed text-muted">
           <div className="mb-1 text-sm font-semibold text-fg">Is this safe for online games?</div>
-          Zenith only changes things you could change yourself: launch options, the game’s settings file (the one its own Graphics menu saves, with
-          values that menu allows) and your graphics driver’s per-game settings (like NVIDIA Control Panel). It never edits, deletes or injects into the
-          game’s installed files and never touches the game while it runs. Everything is switched on right before the game starts and put back when it
-          closes. That’s the lowest-risk way to do this, but no tool can promise a game will never change its rules.
+          With clay textures off, Zenith sticks to things the game or NVIDIA Control Panel let you change yourself: launch options, the game’s settings file
+          (the one its own Graphics menu saves, with values that menu allows) and NVIDIA’s Power management and Texture filtering options. On games with
+          anti-cheat it also skips CPU priority and console launch options, so it never touches them while they run. It never edits or injects into a game’s
+          files. Everything is put back when the game closes. No tool can promise a game will never change its rules.
         </div>
         <dl className="mt-3 divide-y divide-line/[0.06] rounded-xl border border-line/[0.08]">
           {ENGINE_ROWS.map(([engine, what]) => (
@@ -489,7 +532,7 @@ function LaunchTab() {
           ))}
         </dl>
         <p className="mt-3 text-xs leading-relaxed text-muted">
-          Steam games get the options through Steam. Epic, Ubisoft, Riot and Battle.net games can't take launch options, so they get clay textures (NVIDIA) and Boost. Some online games ignore launch options.
+          Steam games get the options through Steam. Epic, Ubisoft, Riot and Battle.net games can't take launch options, so Unreal games there use the settings file and the rest get Boost only. Some online games ignore launch options.
         </p>
       </Card>
 

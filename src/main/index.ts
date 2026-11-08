@@ -17,7 +17,7 @@ import { pathToFileURL } from 'node:url'
 import type { Game, LaunchPlan, LaunchProfileId, Settings, ToastPayload } from '@shared/types'
 import { buildPlan, resolveProfile } from './profiles'
 import { detectEngine } from './engine'
-import { hasNvidiaDriver, nvidiaShuttingDown, recoverClayTextures } from './nvidia'
+import { hasNvidiaDriver, nvidiaShuttingDown, recoverDriverSettings } from './nvidia'
 import { recoverIniEdits } from './ueconfig'
 import { recoverBoost } from './sysboost'
 import { closeDatabase, flushNow, openDatabase } from './db'
@@ -437,7 +437,7 @@ app.whenReady().then(async () => {
   // Undo driver texture tweaks a crash may have left behind, then warm the NVIDIA check.
   recoverIniEdits()
   recoverBoost()
-  void recoverClayTextures().then(() => hasNvidiaDriver())
+  void recoverDriverSettings().then(() => hasNvidiaDriver())
 
   protocol.handle('zenith-media', async (req) => {
     const name = decodeURIComponent(new URL(req.url).pathname.replace(/^\/+/, ''))

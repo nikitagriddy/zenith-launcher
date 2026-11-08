@@ -14,7 +14,11 @@ const shots = join(root, 'shots')
 const sys32 = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32')
 const ue = join(root, 'Games', 'Starfall')
 const unity = join(root, 'Games', 'Pixel Drift')
-for (const d of [shots, join(ue, 'Engine', 'Binaries'), join(ue, 'Starfall', 'Binaries', 'Win64'), join(unity, 'PixelDrift_Data')]) mkdirSync(d, { recursive: true })
+// A fake Unreal game protected by anti-cheat: Zenith has to stay out of it.
+const guardedDir = join(root, 'Games', 'Guarded')
+for (const d of [shots, join(ue, 'Engine', 'Binaries'), join(ue, 'Starfall', 'Binaries', 'Win64'), join(unity, 'PixelDrift_Data'), join(guardedDir, 'Guarded', 'Binaries', 'Win64', 'EasyAntiCheat')]) mkdirSync(d, { recursive: true })
+copyFileSync(join(sys32, 'cmd.exe'), join(guardedDir, 'Guarded.exe'))
+copyFileSync(join(sys32, 'PING.EXE'), join(guardedDir, 'Guarded', 'Binaries', 'Win64', 'Guarded-Win64-Shipping.exe'))
 copyFileSync(join(sys32, 'cmd.exe'), join(ue, 'Starfall.exe'))
 copyFileSync(join(sys32, 'PING.EXE'), join(ue, 'Starfall', 'Binaries', 'Win64', 'Starfall-Win64-Shipping.exe'))
 copyFileSync(join(sys32, 'cmd.exe'), join(unity, 'PixelDrift.exe'))
@@ -82,6 +86,7 @@ const claySet = (exe) => {
   const out = nvdrs('get', exe, '0x0019BB68', '0x00738E8F', '0x00CE2691', '0x10D48A85')
   return ['0x0019BB68', '0x00738E8F', '0x00CE2691', '0x10D48A85'].map((id) => new RegExp('value\\.' + id + '=custom:(\\d+)').exec(out)?.[1] ?? '-').join(',')
 }
+const powerMode = (exe) => /value\.0x1057EB71=custom:(\d+)/.exec(nvdrs('get', exe, '0x1057EB71'))?.[1] ?? null
 const hasProfile = (exe) => !nvdrs('get', exe, '0x00738E8F').includes('profile=none')
 const launchApp = () => _electron.launch({ executablePath: require('electron'), args: ['.'], env: { ...process.env, ZENITH_USER_DATA: join(root, 'user'), LOCALAPPDATA: localApp } })
 
@@ -97,8 +102,10 @@ const until = async (fn, arg, ms = 20000) => {
   }
   throw new Error('timed out')
 }
+const defaults = (await api(() => window.zenith.settings.get())).launch
+check(defaults.potatoResolution === 'native' && defaults.potatoRenderScale === 60 && defaults.clayEnabled === false && defaults.boostNvidia === true, 'Defaults: your resolution, 60% 3D, clay textures off')
 await api(() =>
-  window.zenith.settings.set({ general: { minimizeOnLaunch: false }, discord: { enabled: false }, library: { autoArtwork: false }, launch: { boostPowerPlan: false } })
+  window.zenith.settings.set({ general: { minimizeOnLaunch: false }, discord: { enabled: false }, library: { autoArtwork: false }, launch: { boostPowerPlan: false, potatoResolution: '1280x720', potatoRenderScale: 50 } })
 )
 
 const add = (o) => api((x) => window.zenith.games.add(x), o)
@@ -108,6 +115,7 @@ mkdirSync(join(root, 'Plain'), { recursive: true })
 copyFileSync(join(sys32, 'PING.EXE'), join(root, 'Plain', 'PlainGame.exe'))
 const plain = await add({ title: 'Plain Game', exePath: join(root, 'Plain', 'PlainGame.exe') })
 const epic = await add({ title: 'Epic Thing', exePath: join(ue, 'Starfall.exe'), source: 'epic', launchUri: 'com.epicgames.launcher://apps/x?action=launch' })
+const guarded = await add({ title: 'Guarded', exePath: join(guardedDir, 'Guarded.exe'), launchArgs: recorder() })
 
 // ---- engine detection + plans ----
 const sfPlans = await api((id) => window.zenith.games.launchPlans(id), sf.id)
@@ -127,15 +135,61 @@ const plainPlans = await api((id) => window.zenith.games.launchPlans(id), plain.
 check(plainPlans.potato.tokens.length === 0 && plainPlans.potato.limits.some((l) => /not recognized/.test(l)), 'Unknown engine: honest "graphics stay as they are"')
 const epicPlans = await api((id) => window.zenith.games.launchPlans(id), epic.id)
 check(epicPlans.potato.tokens.length === 0 && epicPlans.potato.settingsEdits.length > 0 && epicPlans.potato.limits.length === 0, 'Epic game: no launch options, real Potato through its settings file')
-check(sfPlans.potato.driverLodBias === 10 && sfPlans.potato.driverExe === 'Starfall-Win64-Shipping.exe', 'Potato on NVIDIA: clay textures (+1.25 default) on the real game exe')
-check(epicPlans.potato.driverLodBias === 10, 'Epic game also gets clay textures through the driver')
-check(sfPlans.potato.settingsFile === ini && sfPlans.potato.applies.some((a) => /Game settings: lowest graphics, 50% 3D resolution, 1280×720 fullscreen/.test(a)), 'Unreal: Potato uses the game’s own settings file')
+check(sfPlans.potato.driverLodBias === null && sfPlans.potato.driverTweak === 'potato' && sfPlans.potato.driverExe === 'Starfall-Win64-Shipping.exe', 'Potato on NVIDIA: official options on the real game exe, no clay unless asked')
+check(epicPlans.potato.driverLodBias === null && epicPlans.potato.driverTweak === 'potato', 'Epic game: official NVIDIA options, no clay')
+check(sfPlans.potato.settingsFile === ini && sfPlans.potato.applies.some((a) => /Game settings: lowest graphics, 50% 3D resolution, 1280×720, fullscreen/.test(a)), 'Unreal: Potato uses the game’s own settings file')
 check(sfPlans.boost.settingsEdits.length === 0 && sfPlans.default.settingsEdits.length === 0, 'Boost and Default never touch the settings file')
-check(sfPlans.boost.driverLodBias === null && sfPlans.default.driverLodBias === null, 'Boost and Default never touch the driver')
+check(sfPlans.boost.driverTweak === 'boost' && sfPlans.boost.driverLodBias === null, 'Boost: NVIDIA maximum performance, no clay')
+check(sfPlans.default.driverTweak === 'none' && sfPlans.default.driverLodBias === null, 'Default never touches the driver')
 await api(() => window.zenith.settings.set({ launch: { potatoResolution: 'native', potatoRenderScale: 70 } }))
 const sfNative = await api((id) => window.zenith.games.launchPlans(id), sf.id)
 check(sfNative.potato.tokens.join(' ').includes('sg.ResolutionQuality 70') && !sfNative.potato.tokens.some((t) => t.startsWith('-ResX')), 'Settings change the plan (native res, 70% scale)')
-await api(() => window.zenith.settings.set({ launch: { potatoResolution: '1280x720', potatoRenderScale: 50 } }))
+check(sfNative.potato.settingsEdits.some((e) => e.key === 'PreferredFullscreenMode' && e.value === '0') && !sfNative.potato.settingsEdits.some((e) => e.key === 'ResolutionSizeX'), 'Keep my resolution: real fullscreen, resolution lines left alone')
+await api(() => window.zenith.settings.set({ launch: { potatoResolution: '1280x720', potatoRenderScale: 25, clayEnabled: true, clayStrength: 69 } }))
+const capped = (await api((id) => window.zenith.games.launchPlans(id), sf.id)).potato
+check(capped.driverLodBias === 20 && capped.limits.some((l) => /some online games ban/.test(l)), 'Clay is capped at +2.5 and the picker warns when it is on')
+check(capped.settingsEdits.some((e) => e.key === 'sg.ResolutionQuality' && e.value === '50'), '3D resolution cannot go under 50%')
+await api(() => window.zenith.settings.set({ launch: { potatoRenderScale: 50, clayEnabled: false, clayStrength: 10 } }))
+
+// ---- anti-cheat: Zenith stays out of the running game ----
+const acPlans = await api((id) => window.zenith.games.launchPlans(id), guarded.id)
+check(acPlans.potato.engine.antiCheat === 'Easy Anti-Cheat', `Anti-cheat found in the game folder (${acPlans.potato.engine.antiCheat})`)
+check(acPlans.boost.priority === 'normal' && acPlans.potato.priority === 'normal' && acPlans.boost.limits.some((l) => /leaves its CPU priority alone/.test(l)), 'Anti-cheat game: CPU priority left alone and the picker says why')
+check(!acPlans.potato.tokens.some((t) => t.startsWith('-ExecCmds')) && acPlans.potato.tokens.includes('-ResX=1280'), 'Anti-cheat game: no console commands at launch, resolution options only')
+check(acPlans.potato.limits.some((l) => /Start the game once normally/.test(l)), 'Anti-cheat game with no settings file yet: says to start it once')
+check(acPlans.potato.driverTweak === 'potato' && acPlans.potato.driverLodBias === null, 'Anti-cheat game: official NVIDIA options, no clay')
+await api((id) => window.zenith.games.launch(id, 'potato'), guarded.id)
+await until(async (id) => (await window.zenith.games.running()).some((r) => r.gameId === id), guarded.id)
+await new Promise((r) => setTimeout(r, 4000)) // past the first priority timer
+const acLine = cmdline('Guarded.exe')
+console.log('      protected game received:', acLine)
+check(priority('Guarded') === 'Normal', `Protected game stays at Normal CPU priority (${priority('Guarded') || 'not found'})`)
+check(!acLine.includes('-ExecCmds') && acLine.includes('-ResX=1280'), 'Protected game got no console commands')
+const acDriver = claySet('Guarded-Win64-Shipping.exe')
+check(powerMode('Guarded-Win64-Shipping.exe') === '1' && acDriver === '-,-,20,-', `Protected game: only the two Control Panel options in the driver (neg,lod,quality,tss = ${acDriver})`)
+await until(async (id) => (await window.zenith.games.running()).every((r) => r.gameId !== id), guarded.id, 30000)
+await new Promise((r) => setTimeout(r, 4000))
+check(!hasProfile('Guarded-Win64-Shipping.exe'), 'Driver profile removed after the protected game closed')
+
+// ---- clay textures need an explicit yes ----
+await p.getByRole('button', { name: 'Settings' }).first().click()
+await p.getByRole('button', { name: 'Launch modes' }).click()
+const claySwitch = p.locator('div.justify-between', { hasText: 'Clay textures (NVIDIA)' }).last().getByRole('switch')
+await claySwitch.scrollIntoViewIfNeeded()
+await p.waitForTimeout(400)
+await p.screenshot({ path: join(shots, 'potato-settings.png') })
+await claySwitch.click()
+await p.getByRole('button', { name: 'Turn on at my own risk' }).waitFor()
+await p.waitForTimeout(400)
+await p.screenshot({ path: join(shots, 'clay-warning.png') })
+await p.getByRole('button', { name: 'Cancel' }).click()
+await p.waitForTimeout(400)
+check((await api(() => window.zenith.settings.get())).launch.clayEnabled === false, 'Clay warning: Cancel keeps it off')
+await claySwitch.click()
+await p.getByRole('button', { name: 'Turn on at my own risk' }).click()
+await until(async () => (await window.zenith.settings.get()).launch.clayEnabled === true)
+await p.waitForTimeout(300)
+check((await p.getByText('Clay strength').count()) === 1, 'Clay warning: confirming turns it on and shows the strength slider')
 
 // ---- real launch through the picker: exact command line, priority, GPU preference ----
 await p.getByRole('button', { name: 'Library' }).first().click()
@@ -157,7 +211,8 @@ check(
   'Fortnite-style 3D resolution lines set to 50% too, dynamic resolution off'
 )
 const clayFull = claySet('Starfall-Win64-Shipping.exe')
-check(clayFull === '1,10,20,8', `all four clay driver settings on while playing (neg,lod,quality,tss = ${clayFull})`)
+check(clayFull === '1,10,20,8', `after opting in: all four clay driver settings on while playing (neg,lod,quality,tss = ${clayFull})`)
+check(powerMode('Starfall-Win64-Shipping.exe') === '1', 'NVIDIA Power management on maximum performance while playing')
 check(iniVal('FrameRateLimit') === '240.000000' && iniVal('Volume') === '0.5' && readFileSync(ini, 'utf8').includes('\r\n'), 'other lines and Windows line endings left alone')
 // Simulate the player changing a setting in-game and the game saving a new line on exit.
 writeFileSync(ini, readFileSync(ini, 'utf8').replace('sg.TextureQuality=0', 'sg.TextureQuality=2').replace('Volume=0.5', 'Volume=0.5\r\nPushToTalk=True'))
@@ -193,6 +248,9 @@ await p.getByRole('button', { name: 'Settings' }).first().click()
 await p.getByRole('button', { name: 'Launch modes' }).click()
 await p.waitForTimeout(600)
 await p.screenshot({ path: join(shots, 'settings.png'), fullPage: false })
+await p.getByText('Is this safe for online games?').scrollIntoViewIfNeeded()
+await p.waitForTimeout(400)
+await p.screenshot({ path: join(shots, 'potato-card.png'), fullPage: false })
 // ---- crash recovery: kill Zenith mid-game, restart, the driver tweak is cleaned up ----
 await api((id) => window.zenith.games.launch(id, 'potato'), sf.id)
 await until(async (id) => (await window.zenith.games.running()).some((r) => r.gameId === id), sf.id)

@@ -23,12 +23,14 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   launch: {
     defaultProfile: 'default',
-    potatoResolution: '1280x720',
-    potatoRenderScale: 50,
+    potatoResolution: 'native',
+    potatoRenderScale: 60,
+    clayEnabled: false,
     clayStrength: 10,
     boostPriority: true,
     boostGpu: true,
     boostPowerPlan: false,
+    boostNvidia: true,
     customArgs: '',
     customBoost: true
   },
